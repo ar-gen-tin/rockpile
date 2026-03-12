@@ -30,10 +30,10 @@ struct PixelBubbleView: View {
     let isDead: Bool
     let spriteSize: CGFloat
 
-    @State private var currentText = ""
     @State private var displayedText = ""
     @State private var opacity: Double = 0
     @State private var bubbleId = UUID()
+    @State private var animationTask: Task<Void, Never>?
 
     /// Interval between bubble appearances
     private let interval: TimeInterval = 10.0
@@ -52,9 +52,9 @@ struct PixelBubbleView: View {
         }
         .frame(width: spriteSize * 2, height: 28)
         .offset(y: -spriteSize * 0.45)
-        .onAppear { scheduleBubble() }
+        .onAppear { startBubbleLoop() }
+        .onDisappear { animationTask?.cancel() }
         .onChange(of: task) { _, _ in
-            // Show a new bubble immediately on state change
             showNewBubble()
         }
         .onChange(of: isDead) { _, dead in
@@ -82,10 +82,26 @@ struct PixelBubbleView: View {
         )
     }
 
-    private func scheduleBubble() {
-        let delay = Double.random(in: 5...interval)
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            showNewBubble()
+    // MARK: - Task-Based Scheduling
+
+    private func startBubbleLoop() {
+        animationTask?.cancel()
+        animationTask = Task {
+            // Initial random delay before first bubble
+            let delay = Double.random(in: 5...interval)
+            try? await Task.sleep(for: .seconds(delay))
+
+            while !Task.isCancelled {
+                let texts = isDead ? BubbleTexts.dead : BubbleTexts.texts(for: task)
+                guard let text = texts.randomElement() else { break }
+
+                await showBubble(text: text)
+                guard !Task.isCancelled else { return }
+
+                // Wait before next bubble
+                let nextDelay = Double.random(in: 5...interval)
+                try? await Task.sleep(for: .seconds(nextDelay))
+            }
         }
     }
 
@@ -93,44 +109,63 @@ struct PixelBubbleView: View {
         let texts = isDead ? BubbleTexts.dead : BubbleTexts.texts(for: task)
         guard let text = texts.randomElement() else { return }
 
-        currentText = text
-        displayedText = ""
-        opacity = 1.0
-        bubbleId = UUID()
+        animationTask?.cancel()
+        animationTask = Task {
+            await showBubble(text: text)
+            guard !Task.isCancelled else { return }
 
-        // Typewriter effect
-        typewriteText(text, index: 0)
+            // Resume the loop after this immediate bubble
+            let nextDelay = Double.random(in: 5...interval)
+            try? await Task.sleep(for: .seconds(nextDelay))
+
+            while !Task.isCancelled {
+                let texts = isDead ? BubbleTexts.dead : BubbleTexts.texts(for: task)
+                guard let text = texts.randomElement() else { break }
+
+                await showBubble(text: text)
+                guard !Task.isCancelled else { return }
+
+                let delay = Double.random(in: 5...interval)
+                try? await Task.sleep(for: .seconds(delay))
+            }
+        }
     }
 
     private func showDeadBubble() {
         guard let text = BubbleTexts.dead.randomElement() else { return }
-        currentText = text
+
+        animationTask?.cancel()
+        animationTask = Task {
+            await showBubble(text: text)
+        }
+    }
+
+    /// Typewrite a single bubble text, stay visible, then fade out
+    private func showBubble(text: String) async {
         displayedText = ""
         opacity = 1.0
         bubbleId = UUID()
-        typewriteText(text, index: 0)
-    }
 
-    private func typewriteText(_ text: String, index: Int) {
-        guard index < text.count else {
-            // Typewriter complete — stay, then fade
-            DispatchQueue.main.asyncAfter(deadline: .now() + stayDuration) {
-                withAnimation(.easeOut(duration: 0.5)) {
-                    opacity = 0
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    displayedText = ""
-                    scheduleBubble()
-                }
-            }
-            return
+        // Typewriter effect — O(1) per character via Array
+        let chars = Array(text)
+        for i in 0..<chars.count {
+            guard !Task.isCancelled else { return }
+            displayedText = String(chars[0...i])
+            try? await Task.sleep(for: .seconds(charDelay))
         }
 
-        let charIndex = text.index(text.startIndex, offsetBy: index)
-        displayedText = String(text[text.startIndex...charIndex])
+        guard !Task.isCancelled else { return }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + charDelay) {
-            typewriteText(text, index: index + 1)
+        // Stay visible
+        try? await Task.sleep(for: .seconds(stayDuration))
+        guard !Task.isCancelled else { return }
+
+        // Fade out
+        withAnimation(.easeOut(duration: 0.5)) {
+            opacity = 0
         }
+        try? await Task.sleep(for: .seconds(0.6))
+        guard !Task.isCancelled else { return }
+        displayedText = ""
     }
 }

@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if AppSettings.needsOnboarding {
             launchOnboarding()
-        } else if AppSettings.setupRole == "host" {
+        } else if AppSettings.setupRole == .host {
             launchHostOnlyMode()
         } else {
             launchNotchMode()
@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.onboardingWindow?.close()
                 self?.onboardingWindow = nil
 
-                if AppSettings.setupRole == "host" {
+                if AppSettings.setupRole == .host {
                     self?.launchHostOnlyMode()
                 } else {
                     self?.launchNotchMode()

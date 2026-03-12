@@ -39,7 +39,7 @@ struct ExpandedPanelView: View {
     private var dashboardView: some View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
-                VStack(alignment: .leading, spacing: DS.Space.sm) {
+                LazyVStack(alignment: .leading, spacing: DS.Space.sm) {
                     // ── 双源合并行: 提供商 + 状态 ──
                     DualSourceInfoRow(
                         localSession: sessionStore.effectiveLocalSession,
@@ -175,7 +175,7 @@ struct ExpandedPanelView: View {
 
                     settingRow(title: L10n.s("settings.mode"), value: AppSettings.roleName(AppSettings.setupRole))
                     settingRow(title: L10n.s("settings.method"),
-                               value: AppSettings.setupRole == "local" ? "Unix Socket" : "TCP")
+                               value: AppSettings.setupRole == .local ? "Unix Socket" : "TCP")
                     settingRow(title: L10n.s("settings.port"), value: "TCP:\(SocketServer.tcpPort)")
 
                     if !AppSettings.rockpileHost.isEmpty {
@@ -276,7 +276,7 @@ struct ExpandedPanelView: View {
 
                     Button(action: {
                         PluginInstaller.installIfNeeded()
-                        reinstallMessage = AppSettings.setupRole == "monitor"
+                        reinstallMessage = AppSettings.setupRole == .monitor
                             ? L10n.s("settings.reinstallNA")
                             : L10n.s("settings.reinstallDone")
                         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {

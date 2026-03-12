@@ -28,6 +28,10 @@ final class SessionStore {
         startCleanupTimer()
     }
 
+    // Note: No deinit needed — singleton (`shared`) is never deallocated.
+    // Adding deinit would require `nonisolated(unsafe)` on cleanupTimer
+    // due to Swift 6 MainActor isolation rules.
+
     var sortedSessions: [SessionData] {
         sessions.values.sorted { $0.sessionNumber < $1.sessionNumber }
     }

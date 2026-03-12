@@ -1,6 +1,14 @@
 import Foundation
 import Security
 
+/// Deployment role — replaces raw "local"/"monitor"/"host" strings
+enum SetupRole: String, Sendable {
+    case local
+    case monitor
+    case host
+    case none = ""
+}
+
 enum AppSettings {
     private static let isMutedKey = "isMuted"
     private static let anthropicApiKeyKey = "anthropicApiKey"
@@ -100,13 +108,13 @@ enum AppSettings {
         (1...5).map { L10n.s("version.note\($0)") }
     }
 
-    /// Setup role: "local" | "monitor" | "host"
+    /// Setup role: .local | .monitor | .host | .none
     /// - local: Rockpile + Rockpile on same machine
     /// - monitor: This Mac monitors a remote Rockpile
     /// - host: This Mac runs Rockpile, sends events to remote monitor
-    static var setupRole: String {
-        get { UserDefaults.standard.string(forKey: setupRoleKey) ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: setupRoleKey) }
+    static var setupRole: SetupRole {
+        get { SetupRole(rawValue: UserDefaults.standard.string(forKey: setupRoleKey) ?? "") ?? .none }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: setupRoleKey) }
     }
 
     /// Connection mode: "plugin" (Rockpile plugin with TCP/socket)
@@ -343,12 +351,12 @@ enum AppSettings {
 
     /// Localized role display name (shared across views)
     @MainActor
-    static func roleName(_ role: String) -> String {
+    static func roleName(_ role: SetupRole) -> String {
         switch role {
-        case "local":   return L10n.s("role.local")
-        case "monitor": return L10n.s("role.monitor")
-        case "host":    return L10n.s("role.host")
-        default:        return L10n.s("role.unknown")
+        case .local:   return L10n.s("role.local")
+        case .monitor: return L10n.s("role.monitor")
+        case .host:    return L10n.s("role.host")
+        case .none:    return L10n.s("role.unknown")
         }
     }
 
@@ -357,7 +365,7 @@ enum AppSettings {
     /// Reset setup to trigger onboarding again
     static func resetSetup() {
         setupCompleted = false
-        setupRole = ""
+        setupRole = .none
         rockpileHost = ""
         monitorHost = ""
     }

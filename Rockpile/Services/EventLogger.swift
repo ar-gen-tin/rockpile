@@ -36,11 +36,19 @@ final class EventLogger {
     /// 心跳计时器 — 每 5 分钟记录运行状态
     private var heartbeatTimer: Timer?
 
+    /// 轮转中缓冲 — 防止 rotateIfNeeded 执行期间丢失日志
+    private var isRotating = false
+    private var rotationBuffer: [String] = []
+
     /// 启动时间
     private let launchTime = Date()
 
     /// 事件计数器（用于心跳摘要）
     private var eventCount: Int = 0
+
+    // Note: No deinit needed — singleton (`shared`) is never deallocated.
+    // Adding deinit would require `nonisolated(unsafe)` on timers/fileHandle
+    // due to Swift 6 MainActor isolation rules.
 
     private init() {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -79,7 +87,7 @@ final class EventLogger {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
         let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
-        let role = AppSettings.setupRole.isEmpty ? "未配置" : AppSettings.setupRole
+        let role = AppSettings.setupRole == .none ? "未配置" : AppSettings.setupRole.rawValue
         let o2Mode = AppSettings.oxygenMode == "claude" ? "Claude 配额" : "按量付费"
         let tankCap = TokenTracker.formatTokens(AppSettings.oxygenTankCapacity)
 
@@ -303,10 +311,20 @@ final class EventLogger {
         // Also log to system console
         logger.info("\(line, privacy: .public)")
 
+        // Buffer during rotation to prevent data loss
+        if isRotating {
+            rotationBuffer.append(line)
+            return
+        }
+
         // Rotate if needed (reopens handle after rotation)
         rotateIfNeeded()
 
         // Append via persistent handle
+        writeLine(line)
+    }
+
+    private func writeLine(_ line: String) {
         let data = (line + "\n").data(using: .utf8) ?? Data()
         if let handle = fileHandle {
             handle.write(data)
@@ -321,6 +339,8 @@ final class EventLogger {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: logFile.path),
               let size = attrs[.size] as? Int,
               size > maxLogSize else { return }
+
+        isRotating = true
 
         // Close current handle before rotating
         fileHandle?.closeFile()
@@ -338,5 +358,13 @@ final class EventLogger {
 
         // Reopen handle for new log file
         openFileHandle()
+        isRotating = false
+
+        // Flush any lines buffered during rotation
+        let buffered = rotationBuffer
+        rotationBuffer.removeAll()
+        for line in buffered {
+            writeLine(line)
+        }
     }
 }

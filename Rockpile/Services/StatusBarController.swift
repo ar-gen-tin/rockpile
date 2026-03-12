@@ -37,6 +37,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         // Called synchronously on main thread before menu displays
         nonisolated(unsafe) let m = menu
         MainActor.assumeIsolated {
+            self.updateIcon()
             m.removeAllItems()
             let freshMenu = self.buildMenu()
             while let item = freshMenu.items.first {
@@ -196,11 +197,35 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     // MARK: - Icon
 
+    /// Update menu bar icon based on current session state
+    private func updateIcon() {
+        guard let item = statusItem else { return }
+        if let icon = createMenuBarIcon() {
+            item.button?.image = icon
+        }
+    }
+
+    /// Determine the sprite sheet name matching current effective session state
+    private var currentIconSpriteName: String {
+        guard let session = StateMachine.shared.sessionStore.effectiveSession else {
+            return "idle_neutral"
+        }
+        let task = session.state.task
+        let emotion = session.state.emotion
+        // Map to sprite sheet: "{task}_{emotion}" with fallback to neutral
+        let name = "\(task.rawValue)_\(emotion.rawValue)"
+        if NSImage(named: name) != nil { return name }
+        // Fallback: task_neutral
+        let fallback = "\(task.rawValue)_neutral"
+        if NSImage(named: fallback) != nil { return fallback }
+        return "idle_neutral"
+    }
+
     /// Extract the crayfish silhouette from the sprite sheet as a macOS template icon.
     /// Template icons are black-on-transparent; macOS automatically renders them
     /// in the correct color (white on dark menu bar, dark on light menu bar).
     private func createMenuBarIcon() -> NSImage? {
-        guard let spriteSheet = NSImage(named: "idle_neutral"),
+        guard let spriteSheet = NSImage(named: currentIconSpriteName),
               let rep = spriteSheet.representations.first else { return nil }
 
         let frameW = CGFloat(rep.pixelsWide) / 12  // 12 animation frames

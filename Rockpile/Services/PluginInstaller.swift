@@ -19,22 +19,20 @@ enum PluginInstaller {
             return
         }
 
-        let role = AppSettings.setupRole
-
-        switch role {
-        case "local":
+        switch AppSettings.setupRole {
+        case .local:
             installLocalPlugin()
-        case "host":
+        case .host:
             let targetHost = AppSettings.monitorHost
             guard !targetHost.isEmpty else {
                 logger.warning("Host role but no monitorHost configured")
                 return
             }
             installTCPPlugin(targetHost: targetHost)
-        case "monitor":
+        case .monitor:
             // Monitor mode: nothing to install, this Mac only receives events
             break
-        default:
+        case .none:
             logger.info("No setup role configured, skipping plugin install")
         }
     }

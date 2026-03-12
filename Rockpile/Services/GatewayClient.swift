@@ -92,9 +92,9 @@ final class GatewayClient {
         let port = AppSettings.gatewayPort
 
         switch AppSettings.setupRole {
-        case "local", "host":
+        case .local, .host:
             host = "127.0.0.1"
-        case "monitor":
+        case .monitor:
             let remoteHost = AppSettings.rockpileHost
             guard !remoteHost.isEmpty else {
                 logger.error("No rockpileHost configured for monitor mode")
@@ -102,7 +102,7 @@ final class GatewayClient {
                 return
             }
             host = remoteHost
-        default:
+        case .none:
             host = "127.0.0.1"
         }
 
@@ -159,22 +159,22 @@ final class GatewayClient {
     // MARK: - Receive Loop
 
     private nonisolated func receiveLoop(ws: URLSessionWebSocketTask) async {
-        while true {
+        while ws.state == .running {
             do {
                 let message = try await ws.receive()
                 switch message {
                 case .string(let text):
-                    await MainActor.run { self.handleMessage(text) }
+                    await MainActor.run { [weak self] in self?.handleMessage(text) }
                 case .data(let data):
                     if let text = String(data: data, encoding: .utf8) {
-                        await MainActor.run { self.handleMessage(text) }
+                        await MainActor.run { [weak self] in self?.handleMessage(text) }
                     }
                 @unknown default:
                     break
                 }
             } catch {
                 logger.warning("WS receive error: \(error.localizedDescription)")
-                await MainActor.run { self.handleDisconnect() }
+                await MainActor.run { [weak self] in self?.handleDisconnect() }
                 return
             }
         }
@@ -339,16 +339,16 @@ final class GatewayClient {
     /// Resolve gateway token: local reads from config file, remote uses AppSettings
     private func resolveGatewayToken() -> String {
         switch AppSettings.setupRole {
-        case "local", "host":
+        case .local, .host:
             // Read from local ~/.rockpile/rockpile.json
             if let token = AppSettings.readLocalGatewayToken() {
                 return token
             }
             // Fallback to manually configured token
             return AppSettings.gatewayToken
-        case "monitor":
+        case .monitor:
             return AppSettings.gatewayToken
-        default:
+        case .none:
             return AppSettings.readLocalGatewayToken() ?? AppSettings.gatewayToken
         }
     }

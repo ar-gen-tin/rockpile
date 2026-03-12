@@ -63,7 +63,8 @@ final class InteractionCoordinator {
     private static let interactDuration: TimeInterval = 2.5
     private static let retreatDuration: TimeInterval = 1.5
 
-    private var isScheduled: Bool = false
+    /// 管理调度和互动流程的 Task，可随时取消
+    private var schedulingTask: Task<Void, Never>?
     private var isRunning: Bool = false
 
     private init() {}
@@ -75,7 +76,8 @@ final class InteractionCoordinator {
     }
 
     func stopScheduling() {
-        isScheduled = false
+        schedulingTask?.cancel()
+        schedulingTask = nil
         isRunning = false
         phase = .idle
     }
@@ -83,6 +85,8 @@ final class InteractionCoordinator {
     /// 外部中断 (比如用户拖拽了某个生物)
     func cancelInteraction() {
         guard isRunning else { return }
+        schedulingTask?.cancel()
+        schedulingTask = nil
         isRunning = false
         phase = .idle
         // 延迟后重新调度
@@ -92,23 +96,24 @@ final class InteractionCoordinator {
     // MARK: - Scheduling
 
     private func checkAndScheduleIfReady() {
-        if crawfishCanInteract && crabCanInteract && !isScheduled && !isRunning {
+        if crawfishCanInteract && crabCanInteract && schedulingTask == nil && !isRunning {
             scheduleNextIfEligible()
         }
     }
 
     private func scheduleNextIfEligible() {
-        guard crawfishCanInteract, crabCanInteract, !isScheduled, !isRunning else { return }
+        guard crawfishCanInteract, crabCanInteract, schedulingTask == nil, !isRunning else { return }
         let delay = Double.random(in: Self.minInterval...Self.maxInterval)
         scheduleAfterDelay(delay)
     }
 
     private func scheduleAfterDelay(_ delay: TimeInterval) {
-        isScheduled = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self else { return }
-            self.isScheduled = false
-            self.triggerInteraction()
+        schedulingTask?.cancel()
+        schedulingTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            self?.schedulingTask = nil
+            self?.triggerInteraction()
         }
     }
 
@@ -127,29 +132,33 @@ final class InteractionCoordinator {
         // 会合点: 两者中间偏随机
         meetingX = CGFloat.random(in: 0.35...0.65)
 
-        // Phase 1: Approaching
-        phase = .approaching(type)
+        // 用单个 Task 管理完整互动流程，可随时取消
+        schedulingTask = Task { [weak self] in
+            // Phase 1: Approaching
+            self?.phase = .approaching(type)
 
-        // Phase 2: Interacting (after approach duration)
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.approachDuration) { [weak self] in
-            guard let self, self.isRunning else { return }
-            self.phase = .interacting(type)
-            self.fxTrigger += 1
+            try? await Task.sleep(for: .seconds(Self.approachDuration))
+            guard !Task.isCancelled, self?.isRunning == true else { return }
 
-            // Phase 3: Retreating (after interact duration)
-            DispatchQueue.main.asyncAfter(deadline: .now() + Self.interactDuration) { [weak self] in
-                guard let self, self.isRunning else { return }
-                self.phase = .retreating
+            // Phase 2: Interacting
+            self?.phase = .interacting(type)
+            self?.fxTrigger += 1
 
-                // Phase 4: Back to idle (after retreat duration)
-                DispatchQueue.main.asyncAfter(deadline: .now() + Self.retreatDuration) { [weak self] in
-                    guard let self else { return }
-                    self.isRunning = false
-                    self.phase = .idle
-                    // 调度下一次
-                    self.scheduleNextIfEligible()
-                }
-            }
+            try? await Task.sleep(for: .seconds(Self.interactDuration))
+            guard !Task.isCancelled, self?.isRunning == true else { return }
+
+            // Phase 3: Retreating
+            self?.phase = .retreating
+
+            try? await Task.sleep(for: .seconds(Self.retreatDuration))
+            guard !Task.isCancelled else { return }
+
+            // Phase 4: Back to idle
+            self?.isRunning = false
+            self?.phase = .idle
+            self?.schedulingTask = nil
+            // 调度下一次
+            self?.scheduleNextIfEligible()
         }
     }
 }

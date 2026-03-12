@@ -44,6 +44,9 @@ final class EmotionAnalyzer {
 
     // MARK: - Public
 
+    /// Task-level timeout (seconds) — guards against DNS/TLS hangs beyond URLRequest.timeoutInterval
+    private static let taskTimeout: TimeInterval = 12.0
+
     func analyze(_ prompt: String) async -> (emotion: ClawEmotion, intensity: Double) {
         let start = ContinuousClock.now
 
@@ -53,7 +56,20 @@ final class EmotionAnalyzer {
         }
 
         do {
-            let result = try await callHaiku(prompt: prompt, apiKey: apiKey)
+            let result = try await withThrowingTaskGroup(
+                of: (emotion: ClawEmotion, intensity: Double).self
+            ) { group in
+                group.addTask {
+                    try await self.callHaiku(prompt: prompt, apiKey: apiKey)
+                }
+                group.addTask {
+                    try await Task.sleep(for: .seconds(Self.taskTimeout))
+                    throw CancellationError()
+                }
+                let result = try await group.next()!
+                group.cancelAll()
+                return result
+            }
             let elapsed = ContinuousClock.now - start
             logger.info("Emotion analysis took \(elapsed, privacy: .public): \(result.emotion.rawValue) @ \(result.intensity)")
             return result
