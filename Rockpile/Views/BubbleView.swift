@@ -8,7 +8,21 @@ import SwiftUI
 
 @MainActor
 enum BubbleTexts {
-    static func texts(for task: ClawTask) -> [String] {
+    static func texts(for task: ClawTask, oxygenStress: Double = 0) -> [String] {
+        // stress > 0.7 → 仅低氧台词
+        if oxygenStress > 0.7 {
+            return L10n.a("bubble.lowO2")
+        }
+        // stress > 0.4 → 混合正常台词 + 警告台词
+        if oxygenStress > 0.4 {
+            let normal = taskTexts(for: task)
+            let warning = L10n.a("bubble.warningO2")
+            return normal + warning
+        }
+        return taskTexts(for: task)
+    }
+
+    private static func taskTexts(for task: ClawTask) -> [String] {
         switch task {
         case .idle:       return L10n.a("bubble.idle")
         case .thinking:   return L10n.a("bubble.thinking")
@@ -29,6 +43,7 @@ struct PixelBubbleView: View {
     let task: ClawTask
     let isDead: Bool
     let spriteSize: CGFloat
+    var oxygenStress: Double = 0
 
     @State private var displayedText = ""
     @State private var opacity: Double = 0
@@ -92,7 +107,7 @@ struct PixelBubbleView: View {
             try? await Task.sleep(for: .seconds(delay))
 
             while !Task.isCancelled {
-                let texts = isDead ? BubbleTexts.dead : BubbleTexts.texts(for: task)
+                let texts = isDead ? BubbleTexts.dead : BubbleTexts.texts(for: task, oxygenStress: oxygenStress)
                 guard let text = texts.randomElement() else { break }
 
                 await showBubble(text: text)
@@ -106,7 +121,7 @@ struct PixelBubbleView: View {
     }
 
     private func showNewBubble() {
-        let texts = isDead ? BubbleTexts.dead : BubbleTexts.texts(for: task)
+        let texts = isDead ? BubbleTexts.dead : BubbleTexts.texts(for: task, oxygenStress: oxygenStress)
         guard let text = texts.randomElement() else { return }
 
         animationTask?.cancel()
@@ -119,7 +134,7 @@ struct PixelBubbleView: View {
             try? await Task.sleep(for: .seconds(nextDelay))
 
             while !Task.isCancelled {
-                let texts = isDead ? BubbleTexts.dead : BubbleTexts.texts(for: task)
+                let texts = isDead ? BubbleTexts.dead : BubbleTexts.texts(for: task, oxygenStress: oxygenStress)
                 guard let text = texts.randomElement() else { break }
 
                 await showBubble(text: text)

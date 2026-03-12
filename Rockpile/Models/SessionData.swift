@@ -19,17 +19,22 @@ final class SessionData: Identifiable {
 
     private var sleepTimer: Timer?
 
-    private static let sleepTimeout: TimeInterval = 300 // 5 minutes
+    /// 当前情绪分析 Task — session 清除时取消
+    var emotionTask: Task<Void, Never>?
+
+    private static let sleepTimeout: TimeInterval = RC.Session.sleepTimeout
     private static let xPositionMin: CGFloat = 0.05
     private static let xPositionRange: CGFloat = 0.90
     private static let xMinSeparation: CGFloat = 0.15
     private static let xCollisionRetries = 10
     private static let xNudgeStep: CGFloat = 0.23
 
-    /// Invalidate timers before removing from session store
+    /// Invalidate timers and cancel tasks before removing from session store
     func cleanup() {
         sleepTimer?.invalidate()
         sleepTimer = nil
+        emotionTask?.cancel()
+        emotionTask = nil
     }
 
     init(sessionId: String, cwd: String, sessionNumber: Int, creatureType: CreatureType = .crawfish, existingXPositions: [CGFloat] = []) {

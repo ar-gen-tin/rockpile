@@ -66,20 +66,61 @@ struct CompactOxygenBarView: View {
                         .frame(width: DS.Compact.percentWidth, alignment: .trailing)
                 }
 
-                // Token count / balance
-                if let balance = tracker.remainingBalanceUSD {
+                // Token / burn rate / ETA — 上下文感知显示
+                if tracker.burnRate > 0 {
+                    // 活跃：消耗率 + ETA
+                    Text("\(tracker.velocityArrow)\(tracker.burnRateText)")
+                        .font(DS.Font.monoTiny)
+                        .foregroundColor(burnRateColor)
+                        .frame(width: DS.Compact.burnRateWidth, alignment: .trailing)
+                    if let eta = tracker.etaText {
+                        Text(eta)
+                            .font(DS.Font.monoTiny)
+                            .foregroundColor(etaColor)
+                            .frame(width: DS.Compact.etaWidth, alignment: .trailing)
+                    }
+                } else if let balance = tracker.remainingBalanceUSD {
                     Text(TokenTracker.formatBalance(balance))
                         .font(DS.Font.monoTiny)
                         .foregroundColor(DS.Semantic.success)
                         .frame(width: DS.Compact.tokenWidth, alignment: .trailing)
                 } else {
-                    Text(TokenTracker.formatTokens(tracker.effectiveDailyUsed))
-                        .font(DS.Font.monoTiny)
-                        .foregroundColor(DS.TextColor.tertiary)
-                        .frame(width: DS.Compact.tokenWidth, alignment: .trailing)
+                    // 空闲时：token 用量 + 日进度%
+                    let used = tracker.effectiveDailyUsed
+                    let cap = tracker.tankCapacityForDisplay
+                    let dailyPct = cap > 0 ? min(100, Int(Double(used) / Double(cap) * 100)) : 0
+                    if used > 0 {
+                        Text("\(TokenTracker.formatTokens(used)) \(dailyPct)%")
+                            .font(DS.Font.monoTiny)
+                            .foregroundColor(DS.TextColor.tertiary)
+                            .frame(width: DS.Compact.tokenWidth + DS.Compact.etaWidth, alignment: .trailing)
+                    } else {
+                        Text(TokenTracker.formatTokens(used))
+                            .font(DS.Font.monoTiny)
+                            .foregroundColor(DS.TextColor.tertiary)
+                            .frame(width: DS.Compact.tokenWidth, alignment: .trailing)
+                    }
                 }
             }
         }
         .frame(height: DS.Compact.barHeight)
+    }
+
+    // MARK: - Burn Rate / ETA Colors
+
+    private var burnRateColor: Color {
+        switch tracker.paceStatus {
+        case .ahead:   return DS.Semantic.warning
+        case .onTrack: return accentColor
+        case .behind:  return DS.Semantic.success
+        case .idle:    return DS.TextColor.tertiary
+        }
+    }
+
+    private var etaColor: Color {
+        guard let eta = tracker.etaMinutes else { return DS.TextColor.tertiary }
+        if eta < 30 { return DS.Semantic.danger }
+        if eta < 120 { return DS.Semantic.warning }
+        return DS.TextColor.tertiary
     }
 }

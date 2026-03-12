@@ -2,8 +2,8 @@ import AppKit
 import Observation
 
 enum ClawConstants {
-    static let expandedPanelSize = CGSize(width: 450, height: 450)
-    static let expandedPanelHorizontalPadding: CGFloat = 19 * 2
+    static let expandedPanelSize = RC.Panel.expandedSize
+    static let expandedPanelHorizontalPadding: CGFloat = RC.Panel.expandedHorizontalPadding
 }
 
 extension Notification.Name {

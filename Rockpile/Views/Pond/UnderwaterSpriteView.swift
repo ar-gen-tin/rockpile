@@ -76,7 +76,8 @@ struct UnderwaterSpriteView: View {
                 .allowsHitTesting(false)
 
             // 🫧 Breath bubbles from mouth
-            BreathBubblesView(isDead: isDead, task: state.task, spriteSize: Self.spriteSize)
+            BreathBubblesView(isDead: isDead, task: state.task, spriteSize: Self.spriteSize,
+                              oxygenStress: tokenTracker?.oxygenStress ?? 0)
 
             // Main sprite container with all overlays
             ZStack {
@@ -164,7 +165,8 @@ struct UnderwaterSpriteView: View {
             HeartParticlesView(triggerCounter: heartCounter, size: Self.spriteSize)
 
             // 🫧 Bubble dialog above sprite
-            PixelBubbleView(task: state.task, isDead: isDead, spriteSize: Self.spriteSize)
+            PixelBubbleView(task: state.task, isDead: isDead, spriteSize: Self.spriteSize,
+                            oxygenStress: tokenTracker?.oxygenStress ?? 0)
                 .allowsHitTesting(false)
 
             // 💬 Reaction text (tap feedback)
@@ -192,7 +194,9 @@ struct UnderwaterSpriteView: View {
                 state: state,
                 oxygenLevel: tokenTracker?.oxygenLevel ?? 1.0,
                 sessionTokens: tokenTracker?.sessionTotalTokens ?? 0,
-                isVisible: showInfoCard
+                isVisible: showInfoCard,
+                burnRateText: (tokenTracker?.burnRate ?? 0) > 0 ? tokenTracker?.burnRateText : nil,
+                etaText: tokenTracker?.etaText
             )
             .offset(x: Self.spriteSize * 0.45, y: -Self.spriteSize * 0.3)
             .id(infoCardDismissId)
@@ -290,11 +294,13 @@ struct UnderwaterSpriteView: View {
     }
 
     private func performSwim() {
-        let maxOffset: CGFloat = 25
+        // stress 高时: 幅度缩小 (疲惫)，速度减慢
+        let stress = tokenTracker?.oxygenStress ?? 0
+        let maxOffset: CGFloat = 25 * CGFloat(max(0.3, 1.0 - stress))
         let target = CGFloat.random(in: -maxOffset...maxOffset)
         facingLeft = target < swimOffset
 
-        let duration = Double.random(in: 1.0...2.0)
+        let duration = Double.random(in: 1.0...2.0) * (1.0 + stress * 0.5)
         withAnimation(.easeInOut(duration: duration)) {
             swimOffset = target
         }

@@ -41,6 +41,14 @@ final class TokenTracker {
     /// xAI remaining balance in USD (from Usage API query)
     private(set) var remainingBalanceUSD: Double?
 
+    // MARK: - Temporal Tracking (Deep Module — 吸收 burn rate/ETA/pace/velocity 复杂度)
+
+    /// 时间戳 + 累计 token 快照（滑动窗口，用于计算 burn rate）
+    private var tokenSnapshots: [(timestamp: Date, total: Int)] = []
+
+    /// 会话开始时间（首次 recordUsage 时设置）
+    private var sessionStartTime: Date?
+
     // MARK: - Feeding System
 
     /// Bonus tokens from feeding (offsets effectiveDailyUsed).
@@ -51,7 +59,7 @@ final class TokenTracker {
     private var lastFeedTime: Date = .distantPast
 
     /// Cooldown between feedings (seconds)
-    private static let feedCooldown: TimeInterval = 30.0
+    private static let feedCooldown: TimeInterval = RC.Feed.cooldown
 
     /// Feed timestamps within overfeed detection window
     private var recentFeedTimes: [Date] = []
@@ -139,6 +147,171 @@ final class TokenTracker {
         isPaidMode || hasUsageData
     }
 
+    // MARK: - Burn Rate & Predictions (Deep Module 公开面)
+
+    /// Tank capacity exposed for UI display (日进度计算)
+    var tankCapacityForDisplay: Int { tankCapacity }
+
+    /// 会话持续时长（秒）
+    var sessionDurationSeconds: TimeInterval {
+        guard let start = sessionStartTime else { return 0 }
+        return Date().timeIntervalSince(start)
+    }
+
+    /// 格式化会话时长: "12m", "1h3m"
+    var sessionDurationText: String {
+        let total = Int(sessionDurationSeconds)
+        if total >= 3600 {
+            return "\(total / 3600)h\((total % 3600) / 60)m"
+        } else if total >= 60 {
+            return "\(total / 60)m"
+        }
+        return "\(max(total, 0))s"
+    }
+
+    /// 近 2 分钟 tokens/分钟（平滑值）。无数据时返回 0 — Define Errors Out。
+    var burnRate: Double {
+        let windowSize = RC.BurnRate.windowSize
+        let now = Date()
+        let cutoff = now.addingTimeInterval(-windowSize)
+        let recent = tokenSnapshots.filter { $0.timestamp >= cutoff }
+        guard recent.count >= RC.BurnRate.minDataPoints,
+              let first = recent.first, let last = recent.last else { return 0 }
+        let elapsed = last.timestamp.timeIntervalSince(first.timestamp)
+        guard elapsed >= 10 else { return 0 }  // 至少 10 秒跨度
+        let tokenDelta = Double(last.total - first.total)
+        guard tokenDelta > 0 else { return 0 }
+        return tokenDelta / (elapsed / 60.0)  // tokens per minute
+    }
+
+    /// 格式化消耗率: "2.1K/m", "0/m"
+    var burnRateText: String {
+        let rate = Int(burnRate)
+        if rate == 0 { return "0/m" }
+        return "\(Self.formatTokens(rate))/m"
+    }
+
+    /// 预计耗尽分钟数。burn rate 为 0 或无法计算时返回 nil。
+    var etaMinutes: Double? {
+        guard burnRate > 0 else { return nil }
+        let remaining = Double(max(0, tankCapacity - effectiveDailyUsed + feedBonusTokens))
+        guard remaining > 0 else { return 0 }
+        return remaining / burnRate
+    }
+
+    /// 格式化 ETA: "~2.5h", "~18m", "<1m", nil
+    var etaText: String? {
+        guard let eta = etaMinutes else { return nil }
+        if eta >= 60 {
+            return String(format: "~%.1fh", eta / 60)
+        } else if eta >= 1 {
+            return "~\(Int(eta))m"
+        }
+        return "<1m"
+    }
+
+    /// 配速状态 — 对比 5 小时线性预算
+    enum PaceStatus: String {
+        case ahead    // 消耗速度超过可持续水平
+        case onTrack  // ±20% 线性配速
+        case behind   // 消耗低于预算
+        case idle     // 无数据 / 零消耗
+    }
+
+    var paceStatus: PaceStatus {
+        guard burnRate > 0 else { return .idle }
+        let linearPace = Double(tankCapacity) / RC.BurnRate.dailyBudgetMinutes
+        let ratio = burnRate / max(linearPace, 1)
+        if ratio > 1.2 { return .ahead }
+        if ratio < 0.8 { return .behind }
+        return .onTrack
+    }
+
+    /// 速度趋势 — 近 1 分钟 vs 前 1 分钟
+    enum VelocityTrend: String {
+        case increasing  // >15% 加速
+        case stable      // ±15% 内
+        case decreasing  // >15% 减速
+        case unknown     // 数据不足
+    }
+
+    var velocityTrend: VelocityTrend {
+        let now = Date()
+        let mid = now.addingTimeInterval(-60)
+        let start = now.addingTimeInterval(-120)
+        let recentHalf = tokenSnapshots.filter { $0.timestamp >= mid }
+        let olderHalf = tokenSnapshots.filter { $0.timestamp >= start && $0.timestamp < mid }
+        guard recentHalf.count >= 2, olderHalf.count >= 2 else { return .unknown }
+
+        func rate(_ snapshots: [(timestamp: Date, total: Int)]) -> Double {
+            guard let f = snapshots.first, let l = snapshots.last else { return 0 }
+            let dt = l.timestamp.timeIntervalSince(f.timestamp)
+            guard dt > 5 else { return 0 }
+            return Double(l.total - f.total) / (dt / 60.0)
+        }
+
+        let recentRate = rate(recentHalf)
+        let olderRate = rate(olderHalf)
+        guard olderRate > 0 else {
+            return recentRate > 0 ? .increasing : .unknown
+        }
+        let change = (recentRate - olderRate) / olderRate
+        if change > RC.BurnRate.velocityThreshold { return .increasing }
+        if change < -RC.BurnRate.velocityThreshold { return .decreasing }
+        return .stable
+    }
+
+    /// 趋势箭头 UI
+    var velocityArrow: String {
+        switch velocityTrend {
+        case .increasing: return "↑"
+        case .stable:     return "→"
+        case .decreasing: return "↓"
+        case .unknown:    return ""
+        }
+    }
+
+    /// O₂ 压力综合值 (0.0=平静, 1.0=极度紧张)
+    /// 综合 oxygenLevel + burnRate pace + velocityTrend + ETA
+    var oxygenStress: Double {
+        if isDead { return 1.0 }
+        if !hasUsageData { return 0.0 }
+
+        // 基础压力: O₂ 越低压力越高
+        var stress = 1.0 - oxygenLevel
+
+        // 配速过快时增加压力
+        if paceStatus == .ahead {
+            stress = min(1.0, stress + 0.15)
+        }
+
+        // 加速中增加压力
+        if velocityTrend == .increasing {
+            stress = min(1.0, stress + 0.1)
+        }
+
+        // ETA 很短时额外增加压力
+        if let eta = etaMinutes, eta < 30 {
+            stress = min(1.0, stress + 0.2)
+        }
+
+        return stress
+    }
+
+    // MARK: - Temporal Snapshot Recording
+
+    /// 记录时间快照（在各 record 方法中调用）
+    private func recordSnapshot() {
+        if sessionStartTime == nil {
+            sessionStartTime = Date()
+        }
+        let now = Date()
+        tokenSnapshots.append((timestamp: now, total: sessionTotalTokens))
+        // 裁剪 5 分钟外的旧快照
+        let cutoff = now.addingTimeInterval(-300)
+        tokenSnapshots.removeAll { $0.timestamp < cutoff }
+    }
+
     /// O₂ zone name for logging
     private var oxygenZoneName: String {
         if isDead { return "K.O." }
@@ -180,6 +353,7 @@ final class TokenTracker {
         }
 
         lastUpdateTime = Date()
+        recordSnapshot()
 
         // Log O₂ zone transitions
         let newZone = oxygenZoneName
@@ -203,6 +377,7 @@ final class TokenTracker {
         sessionCacheReadTokens = max(sessionCacheReadTokens, cacheReadTokens)
         sessionCacheCreationTokens = max(sessionCacheCreationTokens, cacheWriteTokens)
         lastUpdateTime = Date()
+        recordSnapshot()
     }
 
     /// Record usage from provider Usage API query (absolute daily values).
@@ -218,6 +393,7 @@ final class TokenTracker {
             remainingBalanceUSD = balance
         }
         lastUpdateTime = result.queryTime
+        recordSnapshot()
     }
 
     /// Set dailyTokensUsed from local stats-cache.json file read.
@@ -276,8 +452,8 @@ final class TokenTracker {
             overfedSince = now
         }
 
-        // Add 5% of tank capacity as bonus tokens
-        let bonusAmount = Int(Double(tankCapacity) * 0.05)
+        // Add bonus fraction of tank capacity as bonus tokens
+        let bonusAmount = Int(Double(tankCapacity) * RC.Feed.bonusFraction)
         feedBonusTokens = min(feedBonusTokens + bonusAmount, max(effectiveDailyUsed, 1))
         return true
     }
@@ -291,6 +467,8 @@ final class TokenTracker {
         dailyTokensUsed = 0
         isRateLimited = false
         lastUpdateTime = .distantPast
+        tokenSnapshots.removeAll()
+        sessionStartTime = nil
     }
 
     // MARK: - Display Helpers

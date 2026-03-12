@@ -14,8 +14,15 @@ extension Notification.Name {
 final class StatusBarController: NSObject, NSMenuDelegate {
     private var statusItem: NSStatusItem?
 
+    /// Icon cache — avoid re-rendering when sprite name hasn't changed (CodexBar IconCacheStore 简化版)
+    private var cachedIconName: String?
+    private var cachedIcon: NSImage?
+
+    /// 标题刷新计时器 — 30 秒更新 O₂% 显示
+    private var titleTimer: Timer?
+
     func setup() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         if let icon = createMenuBarIcon() {
             item.button?.image = icon
@@ -23,12 +30,48 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             item.button?.title = "🦞"
         }
         item.button?.toolTip = "Rockpile"
+        item.button?.imagePosition = .imageLeading
 
         let menu = NSMenu()
         menu.delegate = self
         item.menu = menu
         statusItem = item
+
+        // 定时更新标题 O₂%
+        updateTitle()
+        titleTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.updateTitle() }
+        }
+
         logger.info("Status bar item created")
+    }
+
+    // MARK: - Title Update
+
+    /// 更新状态栏标题: icon + O₂%（优先显示活跃会话，空闲时显示日用量）
+    private func updateTitle() {
+        guard let item = statusItem else { return }
+        let sessionStore = StateMachine.shared.sessionStore
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 9, weight: .medium),
+            .foregroundColor: NSColor.secondaryLabelColor,
+        ]
+
+        if let session = sessionStore.effectiveSession {
+            // 活跃会话: 显示 O₂%
+            let o2 = session.tokenTracker.oxygenPercent
+            item.button?.attributedTitle = NSAttributedString(string: " \(o2)%", attributes: attrs)
+        } else {
+            // 空闲: 显示两个 tracker 中较低的 O₂ (有数据时)
+            let local = sessionStore.localTokenTracker
+            let remote = sessionStore.remoteTokenTracker
+            if local.hasUsageData || remote.hasUsageData {
+                let minO2 = min(local.oxygenPercent, remote.oxygenPercent)
+                item.button?.attributedTitle = NSAttributedString(string: " \(minO2)%", attributes: attrs)
+            } else {
+                item.button?.title = ""
+            }
+        }
     }
 
     // MARK: - NSMenuDelegate
@@ -38,6 +81,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         nonisolated(unsafe) let m = menu
         MainActor.assumeIsolated {
             self.updateIcon()
+            self.updateTitle()
             m.removeAllItems()
             let freshMenu = self.buildMenu()
             while let item = freshMenu.items.first {
@@ -73,16 +117,42 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             menu.addItem(countItem)
 
             // O₂ level
-            let o2 = session.tokenTracker.oxygenLevel
+            let tracker = session.tokenTracker
+            let o2 = tracker.oxygenLevel
             let o2Pct = Int(o2 * 100)
             let o2Text = o2Pct > 0 ? "O\u{2082}  \(o2Pct)%" : "O\u{2082}  \(L10n.s("menu.depleted"))"
             let o2Item = NSMenuItem(title: o2Text, action: nil, keyEquivalent: "")
             o2Item.isEnabled = false
             menu.addItem(o2Item)
+
+            // Burn rate + ETA (仅活跃消耗时显示)
+            if tracker.burnRate > 0 {
+                var rateStr = "\(tracker.velocityArrow)\(tracker.burnRateText)"
+                if let eta = tracker.etaText {
+                    rateStr += "  \(eta)"
+                }
+                let rateItem = NSMenuItem(title: rateStr, action: nil, keyEquivalent: "")
+                rateItem.isEnabled = false
+                menu.addItem(rateItem)
+            }
         } else {
             let idle = NSMenuItem(title: L10n.s("menu.noSession"), action: nil, keyEquivalent: "")
             idle.isEnabled = false
             menu.addItem(idle)
+
+            // 空闲时显示双源 O₂ 概览
+            let localTracker = sessionStore.localTokenTracker
+            let remoteTracker = sessionStore.remoteTokenTracker
+            if localTracker.hasUsageData || remoteTracker.hasUsageData {
+                let localO2 = localTracker.oxygenPercent
+                let remoteO2 = remoteTracker.oxygenPercent
+                let o2Summary = NSMenuItem(
+                    title: "🐚 O\u{2082} \(localO2)%  🦞 O\u{2082} \(remoteO2)%",
+                    action: nil, keyEquivalent: ""
+                )
+                o2Summary.isEnabled = false
+                menu.addItem(o2Summary)
+            }
         }
 
         menu.addItem(.separator())
@@ -197,10 +267,18 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     // MARK: - Icon
 
-    /// Update menu bar icon based on current session state
+    /// Update menu bar icon based on current session state.
+    /// Uses sprite name cache to skip redundant NSImage rendering.
     private func updateIcon() {
         guard let item = statusItem else { return }
+        let name = currentIconSpriteName
+        if name == cachedIconName, let cached = cachedIcon {
+            item.button?.image = cached
+            return
+        }
         if let icon = createMenuBarIcon() {
+            cachedIconName = name
+            cachedIcon = icon
             item.button?.image = icon
         }
     }

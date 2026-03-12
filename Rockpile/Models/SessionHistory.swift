@@ -217,6 +217,31 @@ final class SessionHistory {
         save()
     }
 
+    // MARK: - Aggregates (日汇总 & 趋势)
+
+    /// 今日累计 tokens
+    var todayTotalTokens: Int {
+        let cal = Calendar.current
+        return records
+            .filter { cal.isDateInToday($0.endTime) }
+            .reduce(0) { $0 + $1.totalTokens }
+    }
+
+    /// 昨日累计 tokens
+    var yesterdayTotalTokens: Int {
+        let cal = Calendar.current
+        return records
+            .filter { cal.isDateInYesterday($0.endTime) }
+            .reduce(0) { $0 + $1.totalTokens }
+    }
+
+    /// 日环比趋势: >0.1 增长, <-0.1 减少, nil 无数据
+    var dayOverDayTrend: Double? {
+        let yesterday = yesterdayTotalTokens
+        guard yesterday > 0 else { return todayTotalTokens > 0 ? 1.0 : nil }
+        return Double(todayTotalTokens - yesterday) / Double(yesterday)
+    }
+
     private func load() {
         // Try main file first
         if let data = try? Data(contentsOf: fileURL),

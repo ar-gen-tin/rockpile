@@ -36,8 +36,8 @@ final class GatewayClient {
     private var pingTimer: Timer?
     private var reconnectTimer: Timer?
     private var reconnectDelay: TimeInterval = 1.0
-    private let maxReconnectDelay: TimeInterval = 30.0
-    static let requestTimeout: TimeInterval = 30.0
+    private let maxReconnectDelay: TimeInterval = RC.Gateway.maxReconnectDelay
+    static let requestTimeout: TimeInterval = RC.Gateway.requestTimeout
     private var pendingRequests: [String: CheckedContinuation<GatewayResponse, Error>] = [:]
     private var intentionalDisconnect = false
 
@@ -286,7 +286,9 @@ final class GatewayClient {
 
     private func handleHelloOk(_ response: GatewayResponse) {
         guard response.ok else {
-            logger.error("Auth rejected: \(response.errorMessage ?? "unknown", privacy: .public)")
+            let msg = response.errorMessage ?? "unknown"
+            logger.error("Auth rejected: \(msg, privacy: .public)")
+            StateMachine.shared.reportError("Gateway 认证失败: \(msg)")
             teardown()
             scheduleReconnect()
             return
@@ -355,8 +357,13 @@ final class GatewayClient {
 
     // MARK: - Request/Response
 
+    static let maxPendingRequests = RC.Gateway.maxPendingRequests
+
     private func sendRequest(id: String, payload: [String: Any]) async throws -> GatewayResponse {
         guard let ws = wsTask else { throw GatewayError.notConnected }
+        guard pendingRequests.count < Self.maxPendingRequests else {
+            throw GatewayError.tooManyRequests
+        }
 
         let data = try JSONSerialization.data(withJSONObject: payload)
         guard let text = String(data: data, encoding: .utf8) else {
@@ -444,7 +451,7 @@ final class GatewayClient {
 
     private func startPing() {
         pingTimer?.invalidate()
-        pingTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        pingTimer = Timer.scheduledTimer(withTimeInterval: RC.Gateway.pingInterval, repeats: true) { [weak self] _ in
             self?.wsTask?.sendPing { error in
                 if let error {
                     logger.warning("Ping failed: \(error.localizedDescription)")
@@ -458,6 +465,7 @@ final class GatewayClient {
     private func handleDisconnect() {
         teardown()
         if !intentionalDisconnect {
+            StateMachine.shared.reportError("Gateway 连接断开，正在重连…")
             scheduleReconnect()
         }
     }
@@ -465,10 +473,13 @@ final class GatewayClient {
     private func scheduleReconnect() {
         guard !intentionalDisconnect else { return }
 
-        let delay = reconnectDelay
+        let baseDelay = reconnectDelay
+        // ±25% jitter 防雷群效应 (CodexBar pattern)
+        let jitter = baseDelay * Double.random(in: -0.25...0.25)
+        let delay = max(1.0, baseDelay + jitter)
         reconnectDelay = min(reconnectDelay * 2, maxReconnectDelay)
 
-        logger.info("Reconnecting in \(delay, privacy: .public)s...")
+        logger.info("Reconnecting in \(String(format: "%.1f", delay), privacy: .public)s...")
         reconnectTimer?.invalidate()
         reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             Task { @MainActor in
@@ -499,6 +510,7 @@ enum GatewayError: LocalizedError {
     case encodingError
     case authFailed(String)
     case requestTimeout
+    case tooManyRequests
 
     var errorDescription: String? {
         switch self {
@@ -507,6 +519,7 @@ enum GatewayError: LocalizedError {
         case .encodingError: return "编码错误"
         case .authFailed(let msg): return "认证失败: \(msg)"
         case .requestTimeout: return "请求超时 (30s)"
+        case .tooManyRequests: return "请求过多 (上限 \(RC.Gateway.maxPendingRequests))"
         }
     }
 }

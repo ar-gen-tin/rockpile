@@ -12,11 +12,30 @@ final class StateMachine {
     let sessionStore = SessionStore()
     private var emotionDecayTimer: Timer?
 
+    /// 最近错误 — 在 ExpandedPanelView 显示 toast
+    private(set) var lastError: String?
+    private var errorDismissTask: Task<Void, Never>?
+
+    /// 报告用户可见错误（8 秒后自动消失）
+    func reportError(_ message: String) {
+        lastError = message
+        errorDismissTask?.cancel()
+        errorDismissTask = Task {
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            self.lastError = nil
+        }
+    }
+
     private init() {
         startEmotionDecay()
     }
 
     func handleEvent(_ event: HookEvent, source: EventSource = .tcpSocket) {
+        guard !event.sessionId.isEmpty else {
+            logger.warning("忽略空 sessionId 事件: \(event.event, privacy: .public)")
+            return
+        }
         let creatureType = source.creatureType
 
         switch event.event {
@@ -148,15 +167,17 @@ final class StateMachine {
     }
 
     private func analyzeEmotion(_ prompt: String, for session: SessionData) {
-        Task {
+        session.emotionTask?.cancel()
+        session.emotionTask = Task {
             let (emotion, intensity) = await EmotionAnalyzer.shared.analyze(prompt)
+            guard !Task.isCancelled else { return }
             logger.info("Emotion: \(emotion.rawValue, privacy: .public) @ \(intensity)")
             session.emotionState.recordEmotion(emotion, intensity: intensity)
         }
     }
 
     private func startEmotionDecay() {
-        emotionDecayTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        emotionDecayTimer = Timer.scheduledTimer(withTimeInterval: RC.Emotion.decayInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.sessionStore.decayAllEmotions()
             }

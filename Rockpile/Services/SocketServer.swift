@@ -17,8 +17,12 @@ final class SocketServer: @unchecked Sendable {
     private var eventHandler: HookEventHandler?
     private let queue = DispatchQueue(label: "com.rockpile.socket", qos: .userInitiated)
 
-    /// Last remote client IP that sent us an event (auto-discovery for reverse commands)
-    private(set) var lastRemoteClientIP: String?
+    /// Last remote client IP that sent us an event (auto-discovery for reverse commands).
+    /// Thread-safe: written from `queue`, read via `queue.sync`.
+    private var _lastRemoteClientIP: String?
+    var lastRemoteClientIP: String? {
+        queue.sync { _lastRemoteClientIP }
+    }
 
     private init() {}
 
@@ -187,7 +191,7 @@ final class SocketServer: @unchecked Sendable {
 
         // Track remote client IP for reverse command auto-discovery
         if clientIP != "0.0.0.0" && clientIP != "127.0.0.1" && clientIP != "local" {
-            lastRemoteClientIP = clientIP
+            _lastRemoteClientIP = clientIP
         }
 
         handleClient(clientSocket, clientIP: clientIP, source: source)
@@ -270,6 +274,7 @@ final class SocketServer: @unchecked Sendable {
             logger.warning("Failed to parse event: \(raw, privacy: .public)")
             Task { @MainActor in
                 EventLogger.shared.logParseError(detail: String(raw.prefix(200)))
+                StateMachine.shared.reportError("事件解析失败")
             }
             return
         }

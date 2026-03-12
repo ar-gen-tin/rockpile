@@ -100,7 +100,7 @@ final class EventLogger {
             log("  远程主机: \(AppSettings.rockpileHost)")
         }
         if let ip = SetupManager.getLocalIP() {
-            log("  本机 IP: \(ip)")
+            log("  本机 IP: \(redactIP(ip))")
         }
         log("  日志: \(logFile.path)")
         log("════════════════════════════════════════")
@@ -110,7 +110,7 @@ final class EventLogger {
 
     /// 定时记录运行状态，方便排查"某时段发生了什么"
     private func startHeartbeat() {
-        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: RC.Heartbeat.interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.logHeartbeat()
             }
@@ -137,7 +137,7 @@ final class EventLogger {
     func logRawEvent(source: String, byteCount: Int, clientIP: String? = nil) {
         var msg = "📥 收到数据 [\(source)] \(byteCount) bytes"
         if let ip = clientIP {
-            msg += " from \(ip)"
+            msg += " from \(redactIP(ip))"
         }
         log(msg)
     }
@@ -207,7 +207,7 @@ final class EventLogger {
     func logConnectionAccepted(source: String, clientIP: String? = nil) {
         var msg = "🔌 接受连接: \(source)"
         if let ip = clientIP {
-            msg += " (\(ip))"
+            msg += " (\(redactIP(ip)))"
         }
         log(msg)
     }
@@ -215,7 +215,7 @@ final class EventLogger {
     func logHTTPRequest(method: String, path: String, clientIP: String? = nil) {
         var msg = "🌐 HTTP \(method) \(path)"
         if let ip = clientIP {
-            msg += " from \(ip)"
+            msg += " from \(redactIP(ip))"
         }
         log(msg)
     }
@@ -305,6 +305,30 @@ final class EventLogger {
             return String(id.prefix(8)) + "…"
         }
         return id
+    }
+
+    // MARK: - Redaction (CodexBar PersonalInfoRedactor 风格)
+
+    /// 脱敏 IP 地址: "192.168.1.42" → "192.168.x.x"
+    /// Debug 构建保留完整 IP 以方便调试。
+    func redactIP(_ ip: String) -> String {
+        #if DEBUG
+        return ip
+        #else
+        let parts = ip.split(separator: ".")
+        guard parts.count == 4 else { return "x.x.x.x" }
+        return "\(parts[0]).\(parts[1]).x.x"
+        #endif
+    }
+
+    /// 脱敏 token: "abcd1234efgh5678" → "abcd***5678"
+    func redactToken(_ token: String) -> String {
+        #if DEBUG
+        return token
+        #else
+        guard token.count > 8 else { return "***" }
+        return String(token.prefix(4)) + "***" + String(token.suffix(4))
+        #endif
     }
 
     private func appendLine(_ line: String) {

@@ -91,12 +91,20 @@ struct BreathBubblesView: View {
     let isDead: Bool
     let task: ClawTask
     let spriteSize: CGFloat
+    var oxygenStress: Double = 0
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Bubble cycle time based on task activity
+    /// Bubble cycle time based on task activity + oxygen stress
+    /// stress 高时呼吸加速: 4.0s(平静) → 1.5s(紧张)
     private var cycleBase: Double {
         if isDead { return 100 } // Effectively invisible
+
+        // 优先使用 oxygenStress 驱动呼吸频率（stress > 0 时）
+        if oxygenStress > 0.05 {
+            return 4.0 - oxygenStress * 2.5  // 4.0 → 1.5
+        }
+
         switch task {
         case .working:    return 2.0
         case .thinking:   return 2.8

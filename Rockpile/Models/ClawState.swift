@@ -118,8 +118,10 @@ struct ClawState: Equatable {
     var emotion: ClawEmotion = .neutral
 
     /// Cache for resolved sprite sheet names — avoids NSImage(named:) lookup on every frame.
-    /// Access is effectively single-threaded (SwiftUI view body always on MainActor).
-    private nonisolated(unsafe) static var _resolvedNames: [String: String] = [:]
+    /// Thread-safe via NSLock (CodexBar IconCacheStore pattern).
+    /// `nonisolated(unsafe)` tells Swift 6 that we handle synchronization ourselves.
+    private static let _cacheLock = NSLock()
+    nonisolated(unsafe) private static var _resolvedNames: [String: String] = [:]
 
     /// Resolves sprite sheet name with fallback: exact -> sad (for angry) -> neutral.
     /// Default (crawfish) uses legacy naming: "idle_neutral".
@@ -131,26 +133,23 @@ struct ClawState: Equatable {
     /// hermitCrab → "crab_idle_neutral", crawfish → "idle_neutral" (legacy)
     func spriteSheetName(for creature: CreatureType) -> String {
         let key = "\(creature.rawValue)_\(task.rawValue)_\(emotion.rawValue)"
-        if let cached = Self._resolvedNames[key] { return cached }
+        if let cached = Self._cacheLock.withLock({ Self._resolvedNames[key] }) { return cached }
 
         let prefix = creature.spritePrefix
         let base = prefix.isEmpty ? task.spritePrefix : "\(prefix)_\(task.spritePrefix)"
 
+        let resolved: String
         let name = "\(base)_\(emotion.rawValue)"
         if NSImage(named: name) != nil {
-            Self._resolvedNames[key] = name
-            return name
+            resolved = name
+        } else if emotion == .angry, NSImage(named: "\(base)_sad") != nil {
+            resolved = "\(base)_sad"
+        } else {
+            resolved = "\(base)_neutral"
         }
-        if emotion == .angry {
-            let sadName = "\(base)_sad"
-            if NSImage(named: sadName) != nil {
-                Self._resolvedNames[key] = sadName
-                return sadName
-            }
-        }
-        let fallback = "\(base)_neutral"
-        Self._resolvedNames[key] = fallback
-        return fallback
+
+        Self._cacheLock.withLock { Self._resolvedNames[key] = resolved }
+        return resolved
     }
 
     var animationFPS: Double { task.animationFPS }

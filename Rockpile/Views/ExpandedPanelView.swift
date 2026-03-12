@@ -38,6 +38,32 @@ struct ExpandedPanelView: View {
     @ViewBuilder
     private var dashboardView: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // ── 错误 toast (CodexBar 风格) ──
+            if let error = StateMachine.shared.lastError {
+                HStack(spacing: DS.Space.xs) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(DS.Semantic.warning)
+                    Text(error)
+                        .font(DS.Font.caption)
+                        .foregroundColor(DS.TextColor.primary)
+                        .lineLimit(1)
+                    Spacer()
+                    gatewayStatusView
+                }
+                .padding(.horizontal, DS.Space.md)
+                .padding(.vertical, DS.Space.xs)
+                .background(DS.Semantic.warning.opacity(DS.Opacity.ghost))
+                .transition(.move(edge: .top).combined(with: .opacity))
+            } else {
+                // ── Gateway 连接状态 (无错误时独立显示) ──
+                HStack {
+                    Spacer()
+                    gatewayStatusView
+                }
+                .padding(.horizontal, DS.Space.md)
+                .padding(.top, DS.Space.xxs)
+            }
+
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: DS.Space.sm) {
                     // ── 双源合并行: 提供商 + 状态 ──
@@ -77,6 +103,14 @@ struct ExpandedPanelView: View {
                             .fill(DS.Surface.raised)
                     )
 
+                    // ── Token 消耗概览（空闲时也显示日进度/待命状态）──
+                    if sessionStore.localTokenTracker.hasUsageData || sessionStore.remoteTokenTracker.hasUsageData || sessionStore.activeSessionCount > 0 {
+                        TokenConsumptionCard(
+                            localTracker: sessionStore.localTokenTracker,
+                            remoteTracker: sessionStore.remoteTokenTracker
+                        )
+                    }
+
                     // ── 展开的活动日志 ──
                     if localCardExpanded, let session = sessionStore.effectiveLocalSession {
                         DualSourceActivitySection(
@@ -96,8 +130,28 @@ struct ExpandedPanelView: View {
                     if !history.isEmpty {
                         sectionDivider
 
-                        HStack {
+                        HStack(spacing: DS.Space.xs) {
                             DS.sectionLabel(L10n.s("dash.footprints"))
+
+                            // 今日/昨日汇总 + 趋势箭头
+                            let today = SessionHistory.shared.todayTotalTokens
+                            let yesterday = SessionHistory.shared.yesterdayTotalTokens
+                            if today > 0 {
+                                Text(TokenTracker.formatTokens(today))
+                                    .font(DS.Font.monoSmall)
+                                    .foregroundColor(DS.TextColor.secondary)
+                                if let trend = SessionHistory.shared.dayOverDayTrend {
+                                    Text(trend > 0.1 ? "↑" : trend < -0.1 ? "↓" : "→")
+                                        .font(DS.Font.monoSmall)
+                                        .foregroundColor(trend > 0.1 ? DS.Semantic.warning : trend < -0.1 ? DS.Semantic.success : DS.TextColor.tertiary)
+                                }
+                            } else if yesterday > 0 {
+                                // 今日无数据时显示昨日汇总
+                                Text("\(L10n.s("time.yesterday")) \(TokenTracker.formatTokens(yesterday))")
+                                    .font(DS.Font.monoSmall)
+                                    .foregroundColor(DS.TextColor.tertiary)
+                            }
+
                             Spacer()
                             DashboardPulseView(
                                 snapshot: GatewayDashboard.shared.snapshot,
@@ -131,6 +185,21 @@ struct ExpandedPanelView: View {
         }
         .task {
             await GatewayDashboard.shared.refreshIfNeeded()
+        }
+    }
+
+    // MARK: - Gateway Status
+
+    private var gatewayStatusView: some View {
+        let (color, label): (Color, String) = switch GatewayClient.shared.state {
+        case .connected:      (.green, "已连接")
+        case .connecting:     (.yellow, "连接中")
+        case .authenticating: (.orange, "认证中")
+        case .disconnected:   (.red, "未连接")
+        }
+        return HStack(spacing: 3) {
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(label).font(DS.Font.caption).foregroundColor(DS.TextColor.tertiary)
         }
     }
 

@@ -103,6 +103,8 @@ enum DS {
         static let cardRadius: CGFloat = 8       // 数据卡片圆角
         static let percentWidth: CGFloat = 28    // 百分比标签宽度
         static let tokenWidth: CGFloat = 38      // token 计数/余额宽度
+        static let burnRateWidth: CGFloat = 48   // 消耗率标签宽度 "↑2.1K/m"
+        static let etaWidth: CGFloat = 32        // ETA 标签宽度 "~3.2h"
     }
 
     // MARK: - Surface Colors

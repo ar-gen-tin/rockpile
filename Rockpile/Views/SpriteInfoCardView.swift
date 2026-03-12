@@ -11,6 +11,8 @@ struct SpriteInfoCardView: View {
     let oxygenLevel: Double
     let sessionTokens: Int
     let isVisible: Bool
+    var burnRateText: String?
+    var etaText: String?
 
     @State private var opacity: Double = 0
 
@@ -54,6 +56,22 @@ struct SpriteInfoCardView: View {
                         Text("\(L10n.s("o2.used")) \(TokenTracker.formatTokens(sessionTokens))")
                             .font(DS.Font.monoSmall)
                             .foregroundColor(DS.TextColor.secondary)
+                    }
+                }
+
+                // Line 3: Burn rate + ETA (仅活跃时显示)
+                if let rate = burnRateText {
+                    HStack(spacing: DS.Space.xs) {
+                        Text(rate)
+                            .font(DS.Font.monoSmall)
+                            .foregroundColor(DS.TextColor.secondary)
+                        if let eta = etaText {
+                            Text("·")
+                                .foregroundColor(DS.TextColor.tertiary)
+                            Text(eta)
+                                .font(DS.Font.monoSmall)
+                                .foregroundColor(DS.TextColor.secondary)
+                        }
                     }
                 }
             }

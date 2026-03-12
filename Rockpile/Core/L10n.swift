@@ -103,6 +103,13 @@ enum L10n {
         "dash.noDetail": "无详细数据",
         "dash.tapCollapse": "轻点折叠",
         "dash.tapDetail": "轻点查看详情",
+        "dash.burnRate": "消耗率",
+        "dash.eta": "预计耗尽",
+        "dash.dailyProgress": "日进度",
+        "dash.pace.ahead": "偏快",
+        "dash.pace.onTrack": "正常",
+        "dash.pace.behind": "偏慢",
+        "dash.pace.idle": "待命",
 
         // ── Settings ──
         "settings.title": "设置",
@@ -331,6 +338,8 @@ enum L10n {
         "bubble.sleeping": ["💤 zzz", "别吵…", "做梦中", "zZzZz", "呼噜~"],
         "bubble.compacting": ["压缩中…", "🗜️", "整理记忆", "瘦身!"],
         "bubble.dead": ["💀", "GG", "再见世界…", "没氧气了", "翻肚了…"],
+        "bubble.warningO2": ["有点缺氧…", "氧气不多了", "喘不上气", "🫧快没了"],
+        "bubble.lowO2": ["快窒息了!", "呼吸困难…", "快喂我!", "氧气…氧气!"],
     ]
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -381,6 +390,13 @@ enum L10n {
         "dash.noDetail": "No details",
         "dash.tapCollapse": "Tap to collapse",
         "dash.tapDetail": "Tap for details",
+        "dash.burnRate": "Burn Rate",
+        "dash.eta": "ETA",
+        "dash.dailyProgress": "Daily",
+        "dash.pace.ahead": "Ahead",
+        "dash.pace.onTrack": "On Track",
+        "dash.pace.behind": "Behind",
+        "dash.pace.idle": "Idle",
 
         // ── Settings ──
         "settings.title": "Settings",
@@ -609,6 +625,8 @@ enum L10n {
         "bubble.sleeping": ["💤 zzz", "Shh…", "Dreaming", "zZzZz", "Snore~"],
         "bubble.compacting": ["Compacting…", "🗜️", "Tidying up", "Slimming!"],
         "bubble.dead": ["💀", "GG", "Goodbye…", "No oxygen", "Belly up…"],
+        "bubble.warningO2": ["Running low…", "Need air…", "Gasp~", "🫧 Low O₂"],
+        "bubble.lowO2": ["Can't breathe!", "Help! Air!", "Feed me!", "Oxygen!"],
     ]
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -659,6 +677,13 @@ enum L10n {
         "dash.noDetail": "詳細データなし",
         "dash.tapCollapse": "タップで折りたたむ",
         "dash.tapDetail": "タップで詳細表示",
+        "dash.burnRate": "消費率",
+        "dash.eta": "推定枯渇",
+        "dash.dailyProgress": "日次進捗",
+        "dash.pace.ahead": "速い",
+        "dash.pace.onTrack": "正常",
+        "dash.pace.behind": "遅い",
+        "dash.pace.idle": "待機",
 
         // ── Settings ──
         "settings.title": "設定",
@@ -887,5 +912,7 @@ enum L10n {
         "bubble.sleeping": ["💤 zzz", "しー…", "夢の中", "zZzZz", "グー〜"],
         "bubble.compacting": ["圧縮中…", "🗜️", "整理中", "ダイエット!"],
         "bubble.dead": ["💀", "GG", "さよなら…", "酸素がない", "ひっくり返った…"],
+        "bubble.warningO2": ["酸素少ない…", "息が…", "はぁはぁ", "🫧酸素低下"],
+        "bubble.lowO2": ["息できない！", "助けて！空気！", "餌を！", "酸素！"],
     ]
 }
