@@ -108,14 +108,18 @@ struct DualSourceInfoRow: View {
                     .foregroundColor(DS.TextColor.tertiary)
             }
 
-            Image(systemName: isExpanded.wrappedValue ? "chevron.down" : "chevron.right")
-                .font(.system(size: 8))
-                .foregroundColor(DS.TextColor.muted)
+            // 只在有活动 session 时显示展开箭头
+            if session != nil {
+                Image(systemName: isExpanded.wrappedValue ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 8))
+                    .foregroundColor(DS.TextColor.muted)
+            }
         }
         .padding(.horizontal, DS.Space.sm)
         .padding(.vertical, DS.Space.xxs)
         .contentShape(Rectangle())
         .onTapGesture {
+            guard session != nil else { return }
             withAnimation(.easeInOut(duration: 0.2)) {
                 isExpanded.wrappedValue.toggle()
             }

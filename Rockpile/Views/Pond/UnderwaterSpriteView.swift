@@ -17,8 +17,17 @@ struct UnderwaterSpriteView: View {
     private static let usableWidthFraction: CGFloat = 0.8
     private static let leftMarginFraction: CGFloat = 0.1
 
-    // ── Swimming ──
+    /// 睡眠时降落到沙面
+    /// 几何: spriteSize=80, scale=1.25, content rows 10-49
+    /// content_bottom = (H - |yOffset| - 80) + 49*1.25
+    /// sand_surface ≈ H-30 → yOffset=-11 使 content_bottom ≈ sand_surface
+    private var effectiveYOffset: CGFloat {
+        state == .sleeping ? -11 : yOffset
+    }
+
+    // ── Swimming (arc path) ──
     @State private var swimOffset: CGFloat = 0
+    @State private var swimVertical: CGFloat = 0  // 弧形路径的垂直分量
     @State private var facingLeft: Bool = false
     @State private var canSwim: Bool = false
 
@@ -40,8 +49,9 @@ struct UnderwaterSpriteView: View {
     @State private var recentTapTimes: [Date] = []
     @State private var isAngry: Bool = false
 
-    // ── Interaction: drag ──
+    // ── Interaction: drag (自由拖放，松手保持位置) ──
     @State private var dragOffset: CGSize = .zero
+    @State private var dragBase: CGSize = .zero   // 累积的拖拽位置
     @State private var isDragging: Bool = false
 
     // ── Interaction: double-tap hearts ──
@@ -112,12 +122,18 @@ struct UnderwaterSpriteView: View {
                         }
                         dragOffset = value.translation
                     }
-                    .onEnded { _ in
+                    .onEnded { value in
                         isDragging = false
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
-                            dragOffset = .zero
+                        // 松手保持位置: 累积到 dragBase
+                        dragBase = CGSize(
+                            width: dragBase.width + value.translation.width,
+                            height: dragBase.height + value.translation.height
+                        )
+                        dragOffset = .zero
+                        // 轻微弹性落定
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            dragBase.height += 1.5
                         }
-                        // Resume swimming after snap-back
                         if (state.task.canWalk || manuallyAwake) && !isDead && !reduceMotion {
                             canSwim = true
                             scheduleSwim()
@@ -225,8 +241,8 @@ struct UnderwaterSpriteView: View {
             )
         }
         .shadow(color: Color(red: 0.3, green: 0.6, blue: 0.8).opacity(glowOpacity * 0.5), radius: 6)
-        .offset(x: xOffset + swimOffset + interactionOffset.width + dragOffset.width,
-                y: yOffset + jumpOffset + interactionOffset.height + dragOffset.height)
+        .offset(x: xOffset + swimOffset + interactionOffset.width + dragBase.width + dragOffset.width,
+                y: effectiveYOffset + swimVertical + jumpOffset + interactionOffset.height + dragBase.height + dragOffset.height)
         // ── Lifecycle ──
         .onAppear {
             if reduceMotion {
@@ -301,8 +317,19 @@ struct UnderwaterSpriteView: View {
         facingLeft = target < swimOffset
 
         let duration = Double.random(in: 1.0...2.0) * (1.0 + stress * 0.5)
-        withAnimation(.easeInOut(duration: duration)) {
-            swimOffset = target
+        let halfDuration = duration / 2
+
+        // 弧形路径: 上下波动，模拟水中游泳
+        let arcHeight = CGFloat.random(in: -8...8)
+        withAnimation(.easeIn(duration: halfDuration)) {
+            swimOffset = (swimOffset + target) / 2
+            swimVertical = arcHeight
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + halfDuration) {
+            withAnimation(.easeOut(duration: halfDuration)) {
+                swimOffset = target
+                swimVertical = 0
+            }
         }
 
         // Schedule next swim after animation completes

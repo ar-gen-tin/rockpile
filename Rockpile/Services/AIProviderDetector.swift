@@ -71,7 +71,7 @@ enum AIProvider: String, Sendable {
     /// 推荐瓶容量 (tokens)
     var recommendedCapacity: Int {
         switch self {
-        case .claudeSubscription: return 1_000_000  // Claude Pro ~1M/day
+        case .claudeSubscription: return 300_000   // Claude Code 典型重度日 ~300K output tokens
         case .claudeAPI:          return 2_000_000
         case .openAI:             return 2_000_000
         case .gemini:             return 2_000_000

@@ -51,7 +51,15 @@ enum AdminKeyManager {
         "com.rockpile.admin.\(provider.rawValue).\(creature.rawValue)"
     }
 
+    /// File-based fallback path: ~/.rockpile/keys/<service>.key
+    /// Use when Keychain isn't available (e.g. headless SSH deploy)
+    private static let keysDir: URL = {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".rockpile/keys")
+    }()
+
     private static func readKeychain(service: String, account: String) -> String? {
+        // 1. Try Keychain first
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -60,12 +68,19 @@ enum AdminKeyManager {
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
         var result: AnyObject?
-        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data,
-              let str = String(data: data, encoding: .utf8) else {
-            return nil
+        if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+           let data = result as? Data,
+           let str = String(data: data, encoding: .utf8) {
+            return str
         }
-        return str
+
+        // 2. File-based fallback: ~/.rockpile/keys/<service>.key
+        let filePath = keysDir.appendingPathComponent("\(service).key")
+        if let str = try? String(contentsOf: filePath, encoding: .utf8) {
+            return str.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        return nil
     }
 
     private static func writeKeychain(service: String, account: String, value: String) {

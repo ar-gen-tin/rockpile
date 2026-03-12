@@ -176,11 +176,11 @@ enum AppSettings {
         set { UserDefaults.standard.set(newValue, forKey: localOxygenModeKey) }
     }
 
-    /// Local O₂ tank capacity (default 1M for Claude Pro)
+    /// Local O₂ tank capacity (default 300K — Claude Code 典型重度日产出)
     static var localOxygenTankCapacity: Int {
         get {
             let value = UserDefaults.standard.integer(forKey: localOxygenTankCapacityKey)
-            return value > 0 ? value : 1_000_000
+            return value > 0 ? value : 300_000
         }
         set { UserDefaults.standard.set(newValue, forKey: localOxygenTankCapacityKey) }
     }

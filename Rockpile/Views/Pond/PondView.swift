@@ -87,13 +87,14 @@ struct PondView: View {
                         }
                     }
 
-                    // 🐚 Hermit crabs: lower-mid level (30% 池塘需要更高位置)
+                    // 🐚 Hermit crabs: 贴地 — 嵌入沙面
+                    // sprite=72pt, 帧底部8px透明(≈9pt), groundHeight=30
+                    // yOffset=-16 → 视觉底部 25pt 处, 嵌入沙面 ~5pt
                     if crabs.isEmpty {
-                        // Default idle hermit crab (always visible, sits ON sand)
                         GroundSpriteView(
                             state: .sleeping,
                             xPosition: 0.25,
-                            yOffset: -30,
+                            yOffset: -16,
                             totalWidth: geometry.size.width,
                             glowOpacity: 0,
                             isDead: localTokenTracker?.isDead ?? false,
@@ -103,7 +104,7 @@ struct PondView: View {
                         GroundSpriteView(
                             state: session.state,
                             xPosition: crawfish.isEmpty ? 0.5 : session.spriteXPosition,
-                            yOffset: crawfish.isEmpty ? -28 : max(-40, session.spriteYOffset - 10),
+                            yOffset: crawfish.isEmpty ? -14 : max(-26, session.spriteYOffset - 6),
                             totalWidth: geometry.size.width,
                             glowOpacity: glowOpacity(for: session.id),
                             isDead: session.tokenTracker.isDead,
@@ -114,7 +115,7 @@ struct PondView: View {
                             GroundSpriteView(
                                 state: session.state,
                                 xPosition: session.spriteXPosition,
-                                yOffset: max(-40, session.spriteYOffset - 10),
+                                yOffset: max(-26, session.spriteYOffset - 6),
                                 totalWidth: geometry.size.width,
                                 glowOpacity: glowOpacity(for: session.id),
                                 isDead: session.tokenTracker.isDead,

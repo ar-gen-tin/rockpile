@@ -35,7 +35,7 @@ final class UsageQueryService {
 
         var description: String {
             switch self {
-            case .noAdminKey:              return "未配置管理员 API Key"
+            case .noAdminKey:              return "需要 Management Key（非推理 Key）"
             case .invalidResponse(let c):  return "HTTP \(c)"
             case .decodingFailed(let m):   return "解析失败: \(m)"
             case .networkError(let m):     return "网络错误: \(m)"
@@ -237,6 +237,9 @@ final class UsageQueryService {
     }
 
     /// xAI: GET /v1/billing/teams/{team_id}/prepaid/balance
+    ///
+    /// 需要 Management Key（非推理 Key）。推理 Key 会返回 401。
+    /// 创建方式: console.x.ai → Settings → Management Keys
     private func queryXAI(managementKey: String, teamId: String) async throws -> UsageResult {
         guard !teamId.isEmpty else {
             throw QueryError.decodingFailed("未设置 Team ID")
@@ -250,6 +253,10 @@ final class UsageQueryService {
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw QueryError.networkError("非 HTTP 响应")
+        }
+
+        if http.statusCode == 401 {
+            throw QueryError.noAdminKey  // 推理 Key 无权访问 Management API
         }
         guard http.statusCode == 200 else {
             throw QueryError.invalidResponse(http.statusCode)
@@ -340,6 +347,11 @@ final class UsageQueryService {
 
     /// 直接读取 ~/.claude/stats-cache.json 获取当日用量
     /// Claude Subscription 不需要 Admin API Key，数据在本地
+    ///
+    /// stats-cache.json v2 格式:
+    /// - dailyModelTokens: [{ date: "2026-03-10", tokensByModel: { "claude-opus-4-6": 14505 } }]
+    /// - dailyActivity: [{ date: "2026-03-10", messageCount: 4129, toolCallCount: 840 }]
+    /// - modelUsage: { "claude-opus-4-6": { inputTokens, outputTokens, cacheReadInputTokens, ... } }
     private func readStatsCache() {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let statsPath = home.appendingPathComponent(".claude/stats-cache.json")
@@ -349,13 +361,94 @@ final class UsageQueryService {
             return
         }
 
-        // stats-cache.json 格式: { "dailyTokensUsed": 123456, ... }
+        let tracker = StateMachine.shared.sessionStore.localTokenTracker
+
+        // v1 格式兼容: { "dailyTokensUsed": 123456, ... }
         if let daily = json["dailyTokensUsed"] as? Int, daily > 0 {
-            let tracker = StateMachine.shared.sessionStore.localTokenTracker
             if daily > tracker.dailyTokensUsed {
                 tracker.setDailyTokensFromFile(daily)
             }
+            return
         }
+
+        // v2 格式: 从 dailyModelTokens 提取 token 数
+        // 优先级: 今日 > 昨日 > 最近一天（stats-cache 可能滞后 1-2 天）
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let todayStr = formatter.string(from: Date())
+        let yesterdayStr = formatter.string(from: Calendar.current.date(byAdding: .day, value: -1, to: Date())!)
+
+        if let dailyTokens = json["dailyModelTokens"] as? [[String: Any]] {
+            let todayTokens = sumDayTokens(dailyTokens, date: todayStr)
+            let yesterdayTokens = sumDayTokens(dailyTokens, date: yesterdayStr)
+            let latestTokens = latestDayTokens(dailyTokens)
+
+            let bestDaily = todayTokens > 0 ? todayTokens
+                          : yesterdayTokens > 0 ? yesterdayTokens
+                          : latestTokens
+
+            if bestDaily > 0 && bestDaily > tracker.dailyTokensUsed {
+                tracker.setDailyTokensFromFile(bestDaily)
+            }
+        }
+
+        // 补充: 从 dailyActivity 提取消息数 × 估算倍数 (fallback)
+        if tracker.dailyTokensUsed == 0, let dailyActivity = json["dailyActivity"] as? [[String: Any]] {
+            let todayMessages = sumDayMessages(dailyActivity, date: todayStr)
+            let yesterdayMessages = sumDayMessages(dailyActivity, date: yesterdayStr)
+            let latestMessages = latestDayMessages(dailyActivity)
+            let bestMessages = todayMessages > 0 ? todayMessages
+                             : yesterdayMessages > 0 ? yesterdayMessages
+                             : latestMessages
+
+            // 估算: 平均每条消息 ~50 output tokens (基于历史数据推算)
+            let estimatedTokens = bestMessages * 50
+            if estimatedTokens > 0 && estimatedTokens > tracker.dailyTokensUsed {
+                tracker.setDailyTokensFromFile(estimatedTokens)
+            }
+        }
+    }
+
+    /// 从 dailyModelTokens 数组中提取指定日期的 token 总和
+    private func sumDayTokens(_ days: [[String: Any]], date: String) -> Int {
+        for day in days {
+            guard let d = day["date"] as? String, d == date,
+                  let byModel = day["tokensByModel"] as? [String: Any] else { continue }
+            var total = 0
+            for (_, val) in byModel {
+                if let n = val as? Int { total += n }
+            }
+            return total
+        }
+        return 0
+    }
+
+    /// 从 dailyActivity 数组中提取指定日期的消息数
+    private func sumDayMessages(_ days: [[String: Any]], date: String) -> Int {
+        for day in days {
+            guard let d = day["date"] as? String, d == date,
+                  let count = day["messageCount"] as? Int else { continue }
+            return count
+        }
+        return 0
+    }
+
+    /// 从 dailyModelTokens 数组中取最后（最近）一天的 token 总和
+    private func latestDayTokens(_ days: [[String: Any]]) -> Int {
+        guard let last = days.last,
+              let byModel = last["tokensByModel"] as? [String: Any] else { return 0 }
+        var total = 0
+        for (_, val) in byModel {
+            if let n = val as? Int { total += n }
+        }
+        return total
+    }
+
+    /// 从 dailyActivity 数组中取最后（最近）一天的消息数
+    private func latestDayMessages(_ days: [[String: Any]]) -> Int {
+        guard let last = days.last,
+              let count = last["messageCount"] as? Int else { return 0 }
+        return count
     }
 
     // MARK: - Helpers

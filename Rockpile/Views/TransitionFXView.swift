@@ -59,9 +59,9 @@ struct TransitionFXView: View {
                     context.fill(Path(hRect), with: .color(stateColor.opacity(alpha)))
                     context.fill(Path(vRect), with: .color(stateColor.opacity(alpha)))
 
-                    // Center bright pixel
+                    // Center bright pixel — 使用状态色而非纯白，避免像素艺术上的白斑
                     let cRect = CGRect(x: x - 1, y: y - 1, width: 2, height: 2)
-                    context.fill(Path(cRect), with: .color(Color.white.opacity(alpha * 0.8)))
+                    context.fill(Path(cRect), with: .color(stateColor.opacity(alpha * 0.9)))
                 }
             }
         }

@@ -105,6 +105,7 @@ enum DS {
         static let tokenWidth: CGFloat = 38      // token 计数/余额宽度
         static let burnRateWidth: CGFloat = 48   // 消耗率标签宽度 "↑2.1K/m"
         static let etaWidth: CGFloat = 32        // ETA 标签宽度 "~3.2h"
+        static let dataAreaWidth: CGFloat = 50   // 进度条右侧数据区固定宽度（统一两边条块宽度）
     }
 
     // MARK: - Surface Colors

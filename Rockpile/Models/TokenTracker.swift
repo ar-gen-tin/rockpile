@@ -94,14 +94,14 @@ final class TokenTracker {
     }
 
     /// Effective usage based on O₂ mode setting.
-    /// - Claude mode: prefers dailyTokensUsed from stats-cache.json (daily quota tracking),
-    ///   falls back to session tokens if stats-cache data is unavailable (format changed, etc.)
+    /// - Claude mode: 取 dailyTokensUsed (stats-cache) 与 sessionTotalTokens (实时) 的较大值
+    ///   两者来源不同但度量相同方向，取 max 保证不遗漏
     /// - Paid mode: uses accumulated per-request tokens (session-based tracking for xAI/Google etc.)
     var effectiveDailyUsed: Int {
         if isClaudeQuotaMode {
-            // Prefer daily aggregate; fallback to session tokens if stats-cache returns 0
-            if dailyTokensUsed > 0 { return dailyTokensUsed }
-            return sessionTotalTokens
+            // stats-cache 可能只有昨日数据，session 只有当前会话
+            // 取较大值确保 O₂ 条始终反映最新可用数据
+            return max(dailyTokensUsed, sessionTotalTokens)
         }
         // Paid mode: accumulate from per-request data
         return sessionTotalTokens > 0 ? sessionTotalTokens : dailyTokensUsed

@@ -18,8 +18,17 @@ struct GroundSpriteView: View {
     private static let usableWidthFraction: CGFloat = 0.8
     private static let leftMarginFraction: CGFloat = 0.1
 
-    // ── Crawling (horizontal only, slower) ──
+    /// 睡眠时贴地
+    /// 几何: spriteSize=72, scale=1.125, content rows 24-55
+    /// content_bottom = (H - |yOffset| - 72) + 55*1.125
+    /// sand ≈ H-30 → yOffset=-16 使 content_bottom ≈ H-26 (嵌入沙面 ~4pt)
+    private var effectiveYOffset: CGFloat {
+        state == .sleeping ? -16 : yOffset
+    }
+
+    // ── Crawling (arc path, slower) ──
     @State private var crawlOffset: CGFloat = 0
+    @State private var crawlVertical: CGFloat = 0  // 弧形路径的垂直分量
     @State private var facingLeft: Bool = false
     @State private var canCrawl: Bool = false
 
@@ -40,8 +49,9 @@ struct GroundSpriteView: View {
     @State private var recentTapTimes: [Date] = []
     @State private var isAngry: Bool = false
 
-    // ── Interaction: drag ──
+    // ── Interaction: drag (自由拖放，松手保持位置) ──
     @State private var dragOffset: CGSize = .zero
+    @State private var dragBase: CGSize = .zero   // 累积的拖拽位置
     @State private var isDragging: Bool = false
 
     // ── Interaction: double-tap hearts ──
@@ -104,13 +114,21 @@ struct GroundSpriteView: View {
                             canCrawl = false
                             InteractionCoordinator.shared.cancelInteraction()
                         }
-                        // Horizontal only — 寄居蟹是地面生物，只能水平爬行
-                        dragOffset = CGSize(width: value.translation.width, height: 0)
+                        // 自由 2D 拖放 — 不再限制水平
+                        dragOffset = value.translation
                     }
-                    .onEnded { _ in
+                    .onEnded { value in
                         isDragging = false
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
-                            dragOffset = .zero
+                        // 松手保持位置: 累积到 dragBase
+                        dragBase = CGSize(
+                            width: dragBase.width + value.translation.width,
+                            height: dragBase.height + value.translation.height
+                        )
+                        dragOffset = .zero
+                        // 轻微弹性落定
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            // 微调: 松手后轻微下沉模拟重力
+                            dragBase.height += 2
                         }
                         if (state.task.canWalk || manuallyAwake) && !isDead && !reduceMotion {
                             canCrawl = true
@@ -202,8 +220,8 @@ struct GroundSpriteView: View {
             .offset(y: -Self.spriteSize * 0.3)
         }
         .shadow(color: DS.Semantic.localAccent.opacity(glowOpacity * 0.4), radius: 5)
-        .offset(x: xOffset + crawlOffset + interactionOffset.width + dragOffset.width,
-                y: yOffset + interactionOffset.height + dragOffset.height)
+        .offset(x: xOffset + crawlOffset + interactionOffset.width + dragBase.width + dragOffset.width,
+                y: effectiveYOffset + crawlVertical + interactionOffset.height + dragBase.height + dragOffset.height)
         .onAppear {
             if reduceMotion {
                 entryScale = 1.0
@@ -261,8 +279,19 @@ struct GroundSpriteView: View {
         facingLeft = target < crawlOffset
 
         let duration = Double.random(in: 1.5...3.0) * (1.0 + stress * 0.5)
-        withAnimation(.easeInOut(duration: duration)) {
-            crawlOffset = target
+        let halfDuration = duration / 2
+
+        // 弧形路径: 先上升再下降，模拟自然爬行
+        let arcHeight = CGFloat.random(in: (-4)...(-1)) // 负值 = 上移
+        withAnimation(.easeIn(duration: halfDuration)) {
+            crawlOffset = (crawlOffset + target) / 2
+            crawlVertical = arcHeight
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + halfDuration) {
+            withAnimation(.easeOut(duration: halfDuration)) {
+                crawlOffset = target
+                crawlVertical = 0 // 落回地面
+            }
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.2) {

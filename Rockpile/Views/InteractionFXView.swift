@@ -59,8 +59,9 @@ struct InteractionFXView: View {
                         let vRect = CGRect(x: x - 1, y: y - half, width: 2, height: currentSize)
                         context.fill(Path(hRect), with: .color(particle.color.opacity(alpha)))
                         context.fill(Path(vRect), with: .color(particle.color.opacity(alpha)))
+                        // Center pixel — 使用粒子自身颜色，避免白斑
                         let cRect = CGRect(x: x - 1, y: y - 1, width: 2, height: 2)
-                        context.fill(Path(cRect), with: .color(Color.white.opacity(alpha * 0.8)))
+                        context.fill(Path(cRect), with: .color(particle.color.opacity(alpha * 0.9)))
 
                     case .heart:
                         let text = Text("\u{2764}\u{FE0F}").font(.system(size: currentSize))
@@ -97,11 +98,11 @@ struct InteractionFXView: View {
         case .bump:
             count = 6
             shape = .cross
-            colors = [DS.Semantic.localAccent, DS.Semantic.remoteAccent, .white]
+            colors = [DS.Semantic.localAccent, DS.Semantic.remoteAccent]
         case .highFive:
             count = 8
             shape = .cross
-            colors = [.yellow, .orange, .white]
+            colors = [.yellow, .orange]
         case .play:
             count = 5
             shape = .circle
