@@ -18,11 +18,8 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private var cachedIconName: String?
     private var cachedIcon: NSImage?
 
-    /// 标题刷新计时器 — 30 秒更新 O₂% 显示
-    private var titleTimer: Timer?
-
     func setup() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let icon = createMenuBarIcon() {
             item.button?.image = icon
@@ -30,48 +27,13 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             item.button?.title = "🦞"
         }
         item.button?.toolTip = "Rockpile"
-        item.button?.imagePosition = .imageLeading
 
         let menu = NSMenu()
         menu.delegate = self
         item.menu = menu
         statusItem = item
 
-        // 定时更新标题 O₂%
-        updateTitle()
-        titleTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.updateTitle() }
-        }
-
         logger.info("Status bar item created")
-    }
-
-    // MARK: - Title Update
-
-    /// 更新状态栏标题: icon + O₂%（优先显示活跃会话，空闲时显示日用量）
-    private func updateTitle() {
-        guard let item = statusItem else { return }
-        let sessionStore = StateMachine.shared.sessionStore
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedSystemFont(ofSize: 9, weight: .medium),
-            .foregroundColor: NSColor.secondaryLabelColor,
-        ]
-
-        if let session = sessionStore.effectiveSession {
-            // 活跃会话: 显示 O₂%
-            let o2 = session.tokenTracker.oxygenPercent
-            item.button?.attributedTitle = NSAttributedString(string: " \(o2)%", attributes: attrs)
-        } else {
-            // 空闲: 显示两个 tracker 中较低的 O₂ (有数据时)
-            let local = sessionStore.localTokenTracker
-            let remote = sessionStore.remoteTokenTracker
-            if local.hasUsageData || remote.hasUsageData {
-                let minO2 = min(local.oxygenPercent, remote.oxygenPercent)
-                item.button?.attributedTitle = NSAttributedString(string: " \(minO2)%", attributes: attrs)
-            } else {
-                item.button?.title = ""
-            }
-        }
     }
 
     // MARK: - NSMenuDelegate
@@ -81,7 +43,6 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         nonisolated(unsafe) let m = menu
         MainActor.assumeIsolated {
             self.updateIcon()
-            self.updateTitle()
             m.removeAllItems()
             let freshMenu = self.buildMenu()
             while let item = freshMenu.items.first {
