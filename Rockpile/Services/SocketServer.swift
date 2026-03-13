@@ -24,6 +24,11 @@ final class SocketServer: @unchecked Sendable {
         queue.sync { _lastRemoteClientIP }
     }
 
+    /// Whether either socket (Unix or TCP) is actively listening
+    var isListening: Bool {
+        queue.sync { unixSocket >= 0 || tcpSocket >= 0 }
+    }
+
     private init() {}
 
     func start(onEvent: @escaping HookEventHandler) {

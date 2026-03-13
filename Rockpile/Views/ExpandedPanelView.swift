@@ -191,12 +191,19 @@ struct ExpandedPanelView: View {
     // MARK: - Gateway Status
 
     private var gatewayStatusView: some View {
-        let (color, label): (Color, String) = switch GatewayClient.shared.state {
-        case .connected:      (.green, "已连接")
-        case .connecting:     (.yellow, "连接中")
-        case .authenticating: (.orange, "认证中")
-        case .disconnected:   (.red, "未连接")
-        }
+        let (color, label): (Color, String) = {
+            // In local/host mode, SocketServer is the primary connection
+            if (AppSettings.setupRole == .local || AppSettings.setupRole == .host),
+               SocketServer.shared.isListening {
+                return (.green, "已连接")
+            }
+            return switch GatewayClient.shared.state {
+            case .connected:      (.green, "已连接")
+            case .connecting:     (.yellow, "连接中")
+            case .authenticating: (.orange, "认证中")
+            case .disconnected:   (.red, "未连接")
+            }
+        }()
         return HStack(spacing: 3) {
             Circle().fill(color).frame(width: 6, height: 6)
             Text(label).font(DS.Font.caption).foregroundColor(DS.TextColor.tertiary)

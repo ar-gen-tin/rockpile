@@ -287,14 +287,18 @@ struct NotchContentView: View {
     }
 
     private var connectionLevel: ConnectionLevel {
-        // Gateway WebSocket state takes priority
+        // In local/host mode, SocketServer is the primary connection
+        if AppSettings.setupRole == .local || AppSettings.setupRole == .host {
+            if sessionStore.activeSessionCount > 0 { return .connected }
+            if SocketServer.shared.isListening { return .connected }
+        }
+        // Gateway WebSocket state
         switch GatewayClient.shared.state {
         case .connected:
             return .connected
         case .connecting, .authenticating:
             return .intermediate
         case .disconnected:
-            // Fallback: check if we have plugin sessions
             if sessionStore.activeSessionCount > 0 { return .connected }
             switch CommandSender.shared.lastResult {
             case .sending, .queued:
