@@ -272,26 +272,13 @@ struct NotchContentView: View {
     @ViewBuilder
     private var headerSprites: some View {
         let spriteSize = min(notchSize.height - 4, 28)
-        HStack(spacing: -4) {
-            // Primary: always show crawfish in notch header (hermit crabs only in expanded pond)
-            let primarySession = sessionStore.effectiveSession ?? sessionStore.sortedSessions.first
-            CrawfishSpriteView(
-                state: primarySession?.state ?? .idle,
-                isSelected: true,
-                size: spriteSize
-            )
-
-            // Secondary: crawfish if multiple sessions exist
-            if sessionStore.activeSessionCount > 1,
-               let secondSession = sessionStore.sortedSessions.dropFirst().first {
-                CrawfishSpriteView(
-                    state: secondSession.state,
-                    isSelected: false,
-                    size: spriteSize * 0.85
-                )
-                .opacity(0.8)
-            }
-        }
+        // Single crawfish in notch header (hermit crabs + multi-sprite only in expanded pond)
+        let primarySession = sessionStore.effectiveSession ?? sessionStore.sortedSessions.first
+        CrawfishSpriteView(
+            state: primarySession?.state ?? .idle,
+            isSelected: true,
+            size: spriteSize
+        )
     }
 
     /// 连接状态：green=已连接, yellow=中间态(发送中/排队), red=断开
