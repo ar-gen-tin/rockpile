@@ -96,8 +96,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 StateMachine.shared.handleEvent(event, source: source)
             }
         }
-        // Connect to Gateway WebSocket (dashboard data + reverse commands)
-        GatewayClient.shared.connect()
         statusBar.setup()
     }
 
@@ -110,8 +108,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 StateMachine.shared.handleEvent(event, source: source)
             }
         }
-        // Connect to Rockpile Gateway WebSocket for reverse commands
-        GatewayClient.shared.connect()
+        // Connect to Gateway WebSocket only in monitor mode (local has no Gateway server)
+        if AppSettings.setupRole == .monitor {
+            GatewayClient.shared.connect()
+        }
         // Start cross-creature interaction scheduling
         InteractionCoordinator.shared.startScheduling()
         // Start Usage API polling (if configured)
