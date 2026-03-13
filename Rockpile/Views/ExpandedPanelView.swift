@@ -80,7 +80,7 @@ struct ExpandedPanelView: View {
                     HStack(spacing: 0) {
                         CompactOxygenBarView(
                             tracker: sessionStore.localTokenTracker,
-                            creatureType: .crawfish
+                            creatureType: .hermitCrab
                         )
                         .padding(.horizontal, DS.Space.sm)
                         .frame(maxWidth: .infinity)
@@ -115,7 +115,7 @@ struct ExpandedPanelView: View {
                     if localCardExpanded, let session = sessionStore.effectiveLocalSession {
                         DualSourceActivitySection(
                             session: session,
-                            creatureType: .crawfish
+                            creatureType: .hermitCrab
                         )
                     }
                     if remoteCardExpanded, let session = sessionStore.effectiveRemoteSession {

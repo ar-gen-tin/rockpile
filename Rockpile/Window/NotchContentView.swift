@@ -114,7 +114,8 @@ struct NotchContentView: View {
                             sessions: sessionStore.sortedSessions,
                             selectedSessionId: sessionStore.selectedSessionId,
                             oxygenLevel: sessionStore.effectiveSession?.tokenTracker.oxygenLevel ?? 1.0,
-                            tokenTracker: sessionStore.globalTokenTracker
+                            localTokenTracker: sessionStore.localTokenTracker,
+                            remoteTokenTracker: sessionStore.remoteTokenTracker
                         )
                         .frame(width: panelWidth, height: pondVisibleHeight)
                         .clipped()
@@ -272,27 +273,19 @@ struct NotchContentView: View {
     private var headerSprites: some View {
         let spriteSize = min(notchSize.height - 4, 28)
         HStack(spacing: -4) {
-            // Primary: prefer local hermit crab, fallback to crawfish
-            if let localSession = sessionStore.effectiveLocalSession {
-                HermitCrabSpriteView(
-                    state: localSession.state,
-                    isSelected: true,
-                    size: spriteSize
-                )
-            } else {
-                let crawfishSession = sessionStore.effectiveRemoteSession ?? sessionStore.sortedSessions.first
-                CrawfishSpriteView(
-                    state: crawfishSession?.state ?? .idle,
-                    isSelected: true,
-                    size: spriteSize
-                )
-            }
+            // Primary: always show crawfish in notch header (hermit crabs only in expanded pond)
+            let primarySession = sessionStore.effectiveSession ?? sessionStore.sortedSessions.first
+            CrawfishSpriteView(
+                state: primarySession?.state ?? .idle,
+                isSelected: true,
+                size: spriteSize
+            )
 
-            // Secondary: crawfish if both local + remote exist
-            if let remoteSession = sessionStore.effectiveRemoteSession,
-               sessionStore.effectiveLocalSession != nil {
+            // Secondary: crawfish if multiple sessions exist
+            if sessionStore.activeSessionCount > 1,
+               let secondSession = sessionStore.sortedSessions.dropFirst().first {
                 CrawfishSpriteView(
-                    state: remoteSession.state,
+                    state: secondSession.state,
                     isSelected: false,
                     size: spriteSize * 0.85
                 )

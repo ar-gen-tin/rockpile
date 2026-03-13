@@ -23,7 +23,7 @@ final class SessionStore {
     private static let sessionTimeout: TimeInterval = 300 // 5 分钟（进入休眠即超时）
 
     init() {
-        localTokenTracker.creatureType = .crawfish
+        localTokenTracker.creatureType = .hermitCrab
         remoteTokenTracker.creatureType = .crawfish
         startCleanupTimer()
     }
