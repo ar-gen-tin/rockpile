@@ -114,8 +114,7 @@ struct NotchContentView: View {
                             sessions: sessionStore.sortedSessions,
                             selectedSessionId: sessionStore.selectedSessionId,
                             oxygenLevel: sessionStore.effectiveSession?.tokenTracker.oxygenLevel ?? 1.0,
-                            localTokenTracker: sessionStore.localTokenTracker,
-                            remoteTokenTracker: sessionStore.remoteTokenTracker
+                            tokenTracker: sessionStore.globalTokenTracker
                         )
                         .frame(width: panelWidth, height: pondVisibleHeight)
                         .clipped()

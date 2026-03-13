@@ -12,7 +12,7 @@ struct CompactOxygenBarView: View {
     private var percent: Int { tracker.oxygenPercent }
 
     private var accentColor: Color {
-        creatureType == .hermitCrab ? DS.Semantic.localAccent : DS.Semantic.remoteAccent
+        DS.Semantic.remoteAccent
     }
 
     private var barColor: Color {
