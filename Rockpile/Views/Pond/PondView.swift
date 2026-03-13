@@ -7,9 +7,8 @@ struct PondView: View {
     var selectedSessionId: String?
     /// Oxygen level from the effective session's TokenTracker (1.0 = full, 0.0 = depleted)
     var oxygenLevel: Double = 1.0
-    /// Token trackers for default (idle) creatures when no active session
-    var localTokenTracker: TokenTracker?
-    var remoteTokenTracker: TokenTracker?
+    /// Token tracker for default (idle) crawfish when no active session
+    var tokenTracker: TokenTracker?
 
     var body: some View {
         GeometryReader { geometry in
@@ -43,38 +42,34 @@ struct PondView: View {
                         .allowsHitTesting(false)
                 }
 
-                // Render sprites — always show both creature types
+                // Render sprites — all sessions as crawfish
                 ZStack(alignment: .bottom) {
                     Color.clear
                         .allowsHitTesting(false)
 
-                    let crawfish = sessions.filter { $0.creatureType == .crawfish }
-                    let crabs = sessions.filter { $0.creatureType == .hermitCrab }
-
-                    // 🦞 Crawfish: mid-water level (30% 池塘需要更高位置)
-                    if crawfish.isEmpty {
-                        // Default idle crawfish (always visible, swims above sand)
+                    if sessions.isEmpty {
+                        // Default idle crawfish (always visible, centered)
                         UnderwaterSpriteView(
                             state: .sleeping,
-                            xPosition: 0.75,
-                            yOffset: -45,
+                            xPosition: 0.5,
+                            yOffset: -38,
                             totalWidth: geometry.size.width,
                             glowOpacity: 0,
-                            isDead: remoteTokenTracker?.isDead ?? false,
-                            tokenTracker: remoteTokenTracker
+                            isDead: tokenTracker?.isDead ?? false,
+                            tokenTracker: tokenTracker
                         )
-                    } else if crawfish.count == 1, let session = crawfish.first {
+                    } else if sessions.count == 1, let session = sessions.first {
                         UnderwaterSpriteView(
                             state: session.state,
-                            xPosition: crabs.isEmpty ? 0.5 : session.spriteXPosition,
-                            yOffset: crabs.isEmpty ? -38 : max(-60, session.spriteYOffset - 20),
+                            xPosition: 0.5,
+                            yOffset: -38,
                             totalWidth: geometry.size.width,
                             glowOpacity: glowOpacity(for: session.id),
                             isDead: session.tokenTracker.isDead,
                             tokenTracker: session.tokenTracker
                         )
                     } else {
-                        ForEach(depthSorted(crawfish)) { session in
+                        ForEach(depthSorted(Array(sessions))) { session in
                             UnderwaterSpriteView(
                                 state: session.state,
                                 xPosition: session.spriteXPosition,
@@ -86,52 +81,7 @@ struct PondView: View {
                             )
                         }
                     }
-
-                    // 🐚 Hermit crabs: 贴地 — 嵌入沙面
-                    // sprite=72pt, 帧底部8px透明(≈9pt), groundHeight=30
-                    // yOffset=-16 → 视觉底部 25pt 处, 嵌入沙面 ~5pt
-                    if crabs.isEmpty {
-                        GroundSpriteView(
-                            state: .sleeping,
-                            xPosition: 0.25,
-                            yOffset: -16,
-                            totalWidth: geometry.size.width,
-                            glowOpacity: 0,
-                            isDead: localTokenTracker?.isDead ?? false,
-                            tokenTracker: localTokenTracker
-                        )
-                    } else if crabs.count == 1, let session = crabs.first {
-                        GroundSpriteView(
-                            state: session.state,
-                            xPosition: crawfish.isEmpty ? 0.5 : session.spriteXPosition,
-                            yOffset: crawfish.isEmpty ? -14 : max(-26, session.spriteYOffset - 6),
-                            totalWidth: geometry.size.width,
-                            glowOpacity: glowOpacity(for: session.id),
-                            isDead: session.tokenTracker.isDead,
-                            tokenTracker: session.tokenTracker
-                        )
-                    } else {
-                        ForEach(crabs) { session in
-                            GroundSpriteView(
-                                state: session.state,
-                                xPosition: session.spriteXPosition,
-                                yOffset: max(-26, session.spriteYOffset - 6),
-                                totalWidth: geometry.size.width,
-                                glowOpacity: glowOpacity(for: session.id),
-                                isDead: session.tokenTracker.isDead,
-                                tokenTracker: session.tokenTracker
-                            )
-                        }
-                    }
                 }
-
-                // ✨ Cross-creature interaction FX (between sprites and surface)
-                InteractionFXView(
-                    fxTrigger: InteractionCoordinator.shared.fxTrigger,
-                    meetingX: InteractionCoordinator.shared.meetingX,
-                    totalWidth: geometry.size.width,
-                    interactionType: currentInteractionType
-                )
 
                 // 🌊 Water surface waves at top
                 VStack {
@@ -140,15 +90,6 @@ struct PondView: View {
                 }
                 .allowsHitTesting(false)
             }
-        }
-    }
-
-    /// Extract interaction type from coordinator phase
-    private var currentInteractionType: InteractionCoordinator.InteractionType? {
-        switch InteractionCoordinator.shared.phase {
-        case .interacting(let type): return type
-        case .approaching(let type): return type
-        default: return nil
         }
     }
 

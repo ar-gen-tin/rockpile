@@ -64,7 +64,7 @@ enum EventSource: String, Sendable {
 
     var creatureType: CreatureType {
         switch self {
-        case .unixSocket: return .hermitCrab
+        case .unixSocket: return .crawfish
         case .tcpSocket:  return .crawfish
         case .gateway:    return .crawfish
         }
