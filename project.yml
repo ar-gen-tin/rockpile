@@ -18,7 +18,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.rockpile.app
-        MARKETING_VERSION: "2.2.1"
+        MARKETING_VERSION: "2.3.0"
         CURRENT_PROJECT_VERSION: "1"
         INFOPLIST_FILE: Rockpile/Info.plist
         CODE_SIGN_ENTITLEMENTS: Rockpile/Rockpile.entitlements

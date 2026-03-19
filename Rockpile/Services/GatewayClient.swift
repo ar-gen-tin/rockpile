@@ -328,6 +328,7 @@ final class GatewayClient {
         state = .connected
         reconnectDelay = 1.0
         logger.info("Gateway connected (id: \(self.connectionId ?? "?", privacy: .public))")
+        NotificationManager.shared.notifyConnectionChange(type: "Gateway", connected: true)
 
         let sessInfo = sessionKeys.isEmpty ? "无会话" : "\(sessionKeys.count)个会话"
         EventLogger.shared.logCommandResult(action: "gateway", result: "connected (\(sessInfo))")
@@ -464,6 +465,7 @@ final class GatewayClient {
 
     private func handleDisconnect() {
         teardown()
+        NotificationManager.shared.notifyConnectionChange(type: "Gateway", connected: false)
         if !intentionalDisconnect {
             StateMachine.shared.reportError("Gateway 连接断开，正在重连…")
             scheduleReconnect()
@@ -487,6 +489,24 @@ final class GatewayClient {
             }
         }
     }
+}
+
+// MARK: - AgentDataProvider Conformance
+
+extension GatewayClient: AgentDataProvider {
+    var providerType: ProviderType { .gateway }
+    var providerName: String { "GatewayClient" }
+    var connectionState: ProviderConnectionState {
+        switch state {
+        case .disconnected:   return .disconnected
+        case .connecting:     return .connecting
+        case .authenticating: return .connecting
+        case .connected:      return .connected
+        }
+    }
+    var creatureType: CreatureType? { .crawfish }
+    func connectProvider() { connect() }
+    func disconnectProvider() { disconnect() }
 }
 
 // MARK: - Types

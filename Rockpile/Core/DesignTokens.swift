@@ -130,6 +130,19 @@ enum DS {
         static let lg: CGFloat = 12
     }
 
+    // MARK: - Animation Timing
+
+    enum Timing {
+        /// 状态指示器淡入
+        static let statusFadeIn: Double = 0.3
+        /// 状态脉冲动画周期
+        static let statusPulse: Double = 1.5
+        /// 悬停响应
+        static let hover: Double = 0.15
+        /// 状态切换动画
+        static let stateChange: Double = 0.2
+    }
+
     // MARK: - Section Header Style Helper
     static func sectionLabel(_ title: String) -> some View {
         Text(title.uppercased())

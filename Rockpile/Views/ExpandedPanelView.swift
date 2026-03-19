@@ -31,6 +31,8 @@ struct ExpandedPanelView: View {
     @State private var localOxygenMode: String = AppSettings.localOxygenMode
     @State private var remoteOxygenMode: String = AppSettings.remoteOxygenMode
     @State private var reinstallMessage: String?
+    @State private var customConnections: [CustomConnection] = CustomConnection.loadAll()
+    @State private var showingAddConnection = false
 
     // Chat state
     @State private var chatMessages: [ConversationMessage] = []
@@ -118,6 +120,11 @@ struct ExpandedPanelView: View {
             )
             .padding(.horizontal, DS.Space.md)
             .padding(.vertical, DS.Space.xs)
+
+            // ── Service Status Bar ──
+            ServiceStatusBarView()
+                .padding(.horizontal, DS.Space.md)
+                .padding(.bottom, DS.Space.xxs)
 
             Divider().background(Color.white.opacity(0.04))
 
@@ -304,6 +311,53 @@ struct ExpandedPanelView: View {
 
                     sectionDividerInline
 
+                    // ── Custom Connections Section ──
+                    DS.sectionLabel(L10n.s("conn.title"))
+
+                    ConnectionListView(connections: $customConnections)
+
+                    Button(L10n.s("conn.add")) {
+                        showingAddConnection = true
+                    }
+                    .font(DS.Font.subhead)
+                    .buttonStyle(.plain)
+                    .foregroundColor(DS.Semantic.accent)
+                    .sheet(isPresented: $showingAddConnection) {
+                        AddConnectionView(connections: $customConnections, isPresented: $showingAddConnection)
+                    }
+
+                    sectionDividerInline
+
+                    // ── Notifications Section ──
+                    DS.sectionLabel(L10n.s("notify.title"))
+
+                    notificationToggle(L10n.s("notify.enabled"),
+                        value: Binding(get: { AppSettings.notificationsEnabled },
+                                       set: { AppSettings.notificationsEnabled = $0 }))
+
+                    if AppSettings.notificationsEnabled {
+                        notificationToggle(L10n.s("notify.stateChange"),
+                            value: Binding(get: { AppSettings.notifyStateChange },
+                                           set: { AppSettings.notifyStateChange = $0 }))
+                        notificationToggle(L10n.s("notify.o2Low"),
+                            value: Binding(get: { AppSettings.notifyO2Low },
+                                           set: { AppSettings.notifyO2Low = $0 }))
+                        notificationToggle(L10n.s("notify.o2Critical"),
+                            value: Binding(get: { AppSettings.notifyO2Critical },
+                                           set: { AppSettings.notifyO2Critical = $0 }))
+                        notificationToggle(L10n.s("notify.connection"),
+                            value: Binding(get: { AppSettings.notifyConnection },
+                                           set: { AppSettings.notifyConnection = $0 }))
+                        notificationToggle(L10n.s("notify.sessionComplete"),
+                            value: Binding(get: { AppSettings.notifySessionComplete },
+                                           set: { AppSettings.notifySessionComplete = $0 }))
+                        notificationToggle(L10n.s("notify.serviceStatus"),
+                            value: Binding(get: { AppSettings.notifyServiceStatus },
+                                           set: { AppSettings.notifyServiceStatus = $0 }))
+                    }
+
+                    sectionDividerInline
+
                     // ── Actions Section ──
                     DS.sectionLabel(L10n.s("settings.actions"))
 
@@ -459,6 +513,17 @@ struct ExpandedPanelView: View {
                     )
             }
         }
+    }
+
+    private func notificationToggle(_ label: String, value: Binding<Bool>) -> some View {
+        Toggle(isOn: value) {
+            Text(label)
+                .font(DS.Font.secondary)
+                .foregroundColor(DS.TextColor.primary)
+        }
+        .toggleStyle(.switch)
+        .controlSize(.small)
+        .tint(DS.Semantic.accent)
     }
 
     private func settingRow(title: String, value: String) -> some View {

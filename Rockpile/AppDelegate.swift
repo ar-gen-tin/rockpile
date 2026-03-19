@@ -168,6 +168,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         InteractionCoordinator.shared.startScheduling()
         // Start Usage API polling (if configured)
         UsageQueryService.shared.startPolling()
+        // Register service status providers and start polling
+        let statusMonitor = ServiceStatusMonitor.shared
+        statusMonitor.register(AtlassianStatusProvider())
+        statusMonitor.register(XAIStatusProvider())
+        statusMonitor.register(GoogleCloudStatusProvider())
+        statusMonitor.startPolling()
+        // Register data providers
+        ProviderRegistry.shared.register(SocketServer.shared)
+        ProviderRegistry.shared.register(GatewayClient.shared)
     }
 
     // MARK: - Notch Window

@@ -267,6 +267,68 @@ enum AppSettings {
         set { UserDefaults.standard.set(newValue, forKey: "remotePollingInterval") }
     }
 
+    // MARK: - Notifications
+
+    private static let notifyStateChangeKey = "notifyStateChange"
+    private static let notifyO2LowKey = "notifyO2Low"
+    private static let notifyO2CriticalKey = "notifyO2Critical"
+    private static let notifyConnectionKey = "notifyConnection"
+    private static let notifySessionCompleteKey = "notifySessionComplete"
+    private static let notifyServiceStatusKey = "notifyServiceStatus"
+    private static let notificationsEnabledKey = "notificationsEnabled"
+
+    /// 通知总开关
+    static var notificationsEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: notificationsEnabledKey) == nil ? true : UserDefaults.standard.bool(forKey: notificationsEnabledKey) }
+        set { UserDefaults.standard.set(newValue, forKey: notificationsEnabledKey) }
+    }
+
+    /// 状态变化通知
+    static var notifyStateChange: Bool {
+        get { UserDefaults.standard.object(forKey: notifyStateChangeKey) == nil ? true : UserDefaults.standard.bool(forKey: notifyStateChangeKey) }
+        set { UserDefaults.standard.set(newValue, forKey: notifyStateChangeKey) }
+    }
+
+    /// O₂ 低阈值通知
+    static var notifyO2Low: Bool {
+        get { UserDefaults.standard.object(forKey: notifyO2LowKey) == nil ? true : UserDefaults.standard.bool(forKey: notifyO2LowKey) }
+        set { UserDefaults.standard.set(newValue, forKey: notifyO2LowKey) }
+    }
+
+    /// O₂ 临界阈值通知
+    static var notifyO2Critical: Bool {
+        get { UserDefaults.standard.object(forKey: notifyO2CriticalKey) == nil ? true : UserDefaults.standard.bool(forKey: notifyO2CriticalKey) }
+        set { UserDefaults.standard.set(newValue, forKey: notifyO2CriticalKey) }
+    }
+
+    /// 连接变化通知
+    static var notifyConnection: Bool {
+        get { UserDefaults.standard.object(forKey: notifyConnectionKey) == nil ? true : UserDefaults.standard.bool(forKey: notifyConnectionKey) }
+        set { UserDefaults.standard.set(newValue, forKey: notifyConnectionKey) }
+    }
+
+    /// 会话完成通知
+    static var notifySessionComplete: Bool {
+        get { UserDefaults.standard.object(forKey: notifySessionCompleteKey) == nil ? false : UserDefaults.standard.bool(forKey: notifySessionCompleteKey) }
+        set { UserDefaults.standard.set(newValue, forKey: notifySessionCompleteKey) }
+    }
+
+    /// 服务状态变化通知
+    static var notifyServiceStatus: Bool {
+        get { UserDefaults.standard.object(forKey: notifyServiceStatusKey) == nil ? true : UserDefaults.standard.bool(forKey: notifyServiceStatusKey) }
+        set { UserDefaults.standard.set(newValue, forKey: notifyServiceStatusKey) }
+    }
+
+    // MARK: - Custom Connections
+
+    private static let customConnectionsKey = "customConnections"
+
+    /// 自定义连接 JSON 存储
+    static var customConnectionsData: Data? {
+        get { UserDefaults.standard.data(forKey: customConnectionsKey) }
+        set { UserDefaults.standard.set(newValue, forKey: customConnectionsKey) }
+    }
+
     // MARK: - Command (反向通信)
 
     /// Bearer token for reverse command authentication

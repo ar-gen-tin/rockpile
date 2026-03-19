@@ -44,6 +44,11 @@ final class StateMachine {
             sessionStore.getOrCreateSession(id: event.sessionId, cwd: cwd, creatureType: creatureType)
 
         case "SessionEnd":
+            // Notify before removing
+            if let session = sessionStore.session(for: event.sessionId) {
+                NotificationManager.shared.notifySessionComplete(session: session)
+            }
+            NotificationManager.shared.cleanupSession(event.sessionId)
             sessionStore.removeSession(id: event.sessionId)
 
         case "MessageReceived":
@@ -75,6 +80,7 @@ final class StateMachine {
         case "LLMOutput":
             let session = sessionStore.getOrCreateSession(id: event.sessionId, cwd: cwd, creatureType: creatureType)
             session.updateTask(.working)
+            NotificationManager.shared.notifyStateChange(sessionId: event.sessionId, creatureType: creatureType, newTask: .working)
             recordTokenUsage(event, for: session)
 
         case "ToolCall":
@@ -90,6 +96,7 @@ final class StateMachine {
             let session = sessionStore.getOrCreateSession(id: event.sessionId, cwd: cwd, creatureType: creatureType)
             if event.status == "error" || event.error != nil {
                 session.updateTask(.error)
+                NotificationManager.shared.notifyStateChange(sessionId: event.sessionId, creatureType: creatureType, newTask: .error)
                 session.addActivity(ActivityItem(
                     timestamp: Date(),
                     type: .error,
@@ -180,6 +187,10 @@ final class StateMachine {
         case .crawfish:
             sessionStore.remoteTokenTracker.recordUsage(from: event, sessionId: session.id)
         }
+
+        // Check O₂ thresholds for notifications
+        let o2Pct = Double(session.tokenTracker.oxygenPercent) / 100.0
+        NotificationManager.shared.checkO2Thresholds(creatureType: session.creatureType, oxygenPercent: o2Pct)
 
         if session.tokenTracker.isDead {
             logger.warning("O₂ depleted! Token quota exhausted.")

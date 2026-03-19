@@ -456,3 +456,16 @@ final class SocketServer: @unchecked Sendable {
         }
     }
 }
+
+// MARK: - AgentDataProvider Conformance
+
+extension SocketServer: @preconcurrency AgentDataProvider {
+    @MainActor var providerType: ProviderType { .socket }
+    @MainActor var providerName: String { "SocketServer" }
+    @MainActor var connectionState: ProviderConnectionState {
+        isListening ? .connected : .disconnected
+    }
+    @MainActor var creatureType: CreatureType? { .hermitCrab }
+    @MainActor func connectProvider() { /* managed externally via start() */ }
+    @MainActor func disconnectProvider() { stop() }
+}

@@ -196,11 +196,11 @@ enum L10n {
         "tab.chat": "对话",
 
         // ── Version Notes ──
-        "version.note1": "🐚 寄居蟹: 本地 Claude Code 专属生物",
-        "version.note2": "🦞 双生态: 寄居蟹(本地) + 小龙虾(远程) 共存",
-        "version.note3": "双 O₂ 进度条: 独立追踪本地/远程 token 消耗",
-        "version.note4": "Dashboard 双源卡片: 分别显示本地和远程状态",
-        "version.note5": "池塘分层: 寄居蟹底部爬行，小龙虾中上层游泳",
+        "version.note1": "🔔 桌面通知: 状态变化/O₂阈值/连接/会话完成",
+        "version.note2": "📡 服务状态监控: Anthropic·xAI·Google AI 实时状态",
+        "version.note3": "🔌 数据源协议: 统一 Provider 抽象 + 注册表",
+        "version.note4": "🛠️ 自定义连接: URL 自动检测 + 持久化管理",
+        "version.note5": "⚙️ 通知设置: 6 项独立开关精细控制",
 
         // ── Provider ──
         "provider.claudeSub": "Claude 订阅",
@@ -289,6 +289,49 @@ enum L10n {
         "usage.notHTTP": "非 HTTP 响应",
         "usage.parseFailed": "JSON 解析失败",
         "usage.noData": "无 data 数组",
+
+        // ── Notifications ──
+        "notify.title": "通知",
+        "notify.enabled": "启用通知",
+        "notify.stateChange": "状态变化",
+        "notify.o2Low": "O₂ 低",
+        "notify.o2Critical": "O₂ 临界",
+        "notify.connection": "连接变化",
+        "notify.sessionComplete": "会话完成",
+        "notify.serviceStatus": "服务状态",
+        "notify.stateChanged": "{creature} 状态: {state}",
+        "notify.o2LowBody": "{creature} O₂ 降至 {percent}%",
+        "notify.o2CriticalBody": "{creature} O₂ 临界: {percent}%！",
+        "notify.connected": "{type} 已连接",
+        "notify.disconnected": "{type} 已断开",
+        "notify.sessionDone": "会话结束 · {tokens} tokens",
+
+        // ── Service Status ──
+        "svcStatus.title": "服务状态",
+        "svcStatus.operational": "正常",
+        "svcStatus.degraded": "降级",
+        "svcStatus.majorOutage": "严重故障",
+        "svcStatus.unknown": "未知",
+        "svcStatus.lastChecked": "上次检查",
+        "svcStatus.checking": "检查中…",
+
+        // ── Custom Connections ──
+        "conn.title": "自定义连接",
+        "conn.add": "添加连接",
+        "conn.url": "URL",
+        "conn.name": "名称",
+        "conn.type": "类型",
+        "conn.detecting": "检测中…",
+        "conn.save": "保存",
+        "conn.cancel": "取消",
+        "conn.delete": "删除",
+        "conn.empty": "暂无自定义连接",
+        "conn.invalidURL": "无效 URL",
+
+        // ── Provider Protocol ──
+        "provider.connections": "连接",
+        "provider.allConnected": "全部已连接",
+        "provider.someDisconnected": "部分断开",
     ]
 
     private static let zhArrays: [String: [String]] = [
@@ -491,11 +534,11 @@ enum L10n {
         "tab.chat": "Chat",
 
         // ── Version Notes ──
-        "version.note1": "🐚 Hermit Crab: Local Claude Code companion",
-        "version.note2": "🦞 Dual ecosystem: Hermit Crab (local) + Crawfish (remote)",
-        "version.note3": "Dual O₂ bars: Independent local/remote token tracking",
-        "version.note4": "Dashboard dual-source cards: Separate local and remote status",
-        "version.note5": "Pond layers: Hermit crab crawls on bottom, crawfish swims above",
+        "version.note1": "🔔 Desktop notifications: State/O₂/connection/session alerts",
+        "version.note2": "📡 Service status: Anthropic·xAI·Google AI live monitoring",
+        "version.note3": "🔌 Provider protocol: Unified data source abstraction + registry",
+        "version.note4": "🛠️ Custom connections: Auto-detect URL type + persistent storage",
+        "version.note5": "⚙️ Notification settings: 6 granular toggle controls",
 
         // ── Provider ──
         "provider.claudeSub": "Claude Sub",
@@ -584,6 +627,49 @@ enum L10n {
         "usage.notHTTP": "Non-HTTP response",
         "usage.parseFailed": "JSON parse failed",
         "usage.noData": "No data array",
+
+        // ── Notifications ──
+        "notify.title": "Notifications",
+        "notify.enabled": "Enable Notifications",
+        "notify.stateChange": "State Changes",
+        "notify.o2Low": "O₂ Low",
+        "notify.o2Critical": "O₂ Critical",
+        "notify.connection": "Connection Changes",
+        "notify.sessionComplete": "Session Complete",
+        "notify.serviceStatus": "Service Status",
+        "notify.stateChanged": "{creature} status: {state}",
+        "notify.o2LowBody": "{creature} O₂ dropped to {percent}%",
+        "notify.o2CriticalBody": "{creature} O₂ critical: {percent}%!",
+        "notify.connected": "{type} connected",
+        "notify.disconnected": "{type} disconnected",
+        "notify.sessionDone": "Session ended · {tokens} tokens",
+
+        // ── Service Status ──
+        "svcStatus.title": "Service Status",
+        "svcStatus.operational": "Operational",
+        "svcStatus.degraded": "Degraded",
+        "svcStatus.majorOutage": "Major Outage",
+        "svcStatus.unknown": "Unknown",
+        "svcStatus.lastChecked": "Last checked",
+        "svcStatus.checking": "Checking…",
+
+        // ── Custom Connections ──
+        "conn.title": "Custom Connections",
+        "conn.add": "Add Connection",
+        "conn.url": "URL",
+        "conn.name": "Name",
+        "conn.type": "Type",
+        "conn.detecting": "Detecting…",
+        "conn.save": "Save",
+        "conn.cancel": "Cancel",
+        "conn.delete": "Delete",
+        "conn.empty": "No custom connections",
+        "conn.invalidURL": "Invalid URL",
+
+        // ── Provider Protocol ──
+        "provider.connections": "Connections",
+        "provider.allConnected": "All connected",
+        "provider.someDisconnected": "Some disconnected",
     ]
 
     private static let enArrays: [String: [String]] = [
@@ -786,11 +872,11 @@ enum L10n {
         "tab.chat": "チャット",
 
         // ── Version Notes ──
-        "version.note1": "🐚 ヤドカリ: ローカル Claude Code 専用コンパニオン",
-        "version.note2": "🦞 デュアルエコシステム: ヤドカリ(ローカル) + ザリガニ(リモート)",
-        "version.note3": "デュアル O₂ バー: ローカル/リモートのトークン使用量を個別追跡",
-        "version.note4": "ダッシュボード: ローカルとリモートのステータスを個別表示",
-        "version.note5": "池の階層: ヤドカリは底を這い、ザリガニは上層を泳ぐ",
+        "version.note1": "🔔 デスクトップ通知: 状態/O₂/接続/セッション完了アラート",
+        "version.note2": "📡 サービス状態: Anthropic·xAI·Google AI リアルタイム監視",
+        "version.note3": "🔌 プロバイダープロトコル: 統一データソース抽象 + レジストリ",
+        "version.note4": "🛠️ カスタム接続: URL タイプ自動検出 + 永続化",
+        "version.note5": "⚙️ 通知設定: 6つの個別トグルコントロール",
 
         // ── Provider ──
         "provider.claudeSub": "Claude サブ",
@@ -879,6 +965,49 @@ enum L10n {
         "usage.notHTTP": "非 HTTP レスポンス",
         "usage.parseFailed": "JSON パース失敗",
         "usage.noData": "データ配列なし",
+
+        // ── Notifications ──
+        "notify.title": "通知",
+        "notify.enabled": "通知を有効にする",
+        "notify.stateChange": "状態変化",
+        "notify.o2Low": "O₂ 低下",
+        "notify.o2Critical": "O₂ 臨界",
+        "notify.connection": "接続変化",
+        "notify.sessionComplete": "セッション完了",
+        "notify.serviceStatus": "サービス状態",
+        "notify.stateChanged": "{creature} 状態: {state}",
+        "notify.o2LowBody": "{creature} O₂ が {percent}% に低下",
+        "notify.o2CriticalBody": "{creature} O₂ 臨界: {percent}%！",
+        "notify.connected": "{type} 接続済み",
+        "notify.disconnected": "{type} 切断",
+        "notify.sessionDone": "セッション終了 · {tokens} トークン",
+
+        // ── Service Status ──
+        "svcStatus.title": "サービス状態",
+        "svcStatus.operational": "正常",
+        "svcStatus.degraded": "劣化",
+        "svcStatus.majorOutage": "重大障害",
+        "svcStatus.unknown": "不明",
+        "svcStatus.lastChecked": "最終確認",
+        "svcStatus.checking": "確認中…",
+
+        // ── Custom Connections ──
+        "conn.title": "カスタム接続",
+        "conn.add": "接続を追加",
+        "conn.url": "URL",
+        "conn.name": "名前",
+        "conn.type": "タイプ",
+        "conn.detecting": "検出中…",
+        "conn.save": "保存",
+        "conn.cancel": "キャンセル",
+        "conn.delete": "削除",
+        "conn.empty": "カスタム接続なし",
+        "conn.invalidURL": "無効な URL",
+
+        // ── Provider Protocol ──
+        "provider.connections": "接続",
+        "provider.allConnected": "全接続済み",
+        "provider.someDisconnected": "一部切断",
     ]
 
     private static let jaArrays: [String: [String]] = [

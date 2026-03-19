@@ -55,4 +55,20 @@ enum RC {
         /// 心跳日志间隔（秒）
         static let interval: TimeInterval = 300
     }
+
+    enum Notification {
+        /// 同类通知冷却时间（秒）
+        static let cooldownSeconds: TimeInterval = 30
+        /// O₂ 低阈值 — 低于此值触发提醒
+        static let lowO2Threshold: Double = 0.30
+        /// O₂ 临界阈值 — 低于此值触发紧急提醒
+        static let criticalO2Threshold: Double = 0.10
+    }
+
+    enum ServiceStatus {
+        /// 服务状态轮询间隔（秒）
+        static let pollingInterval: TimeInterval = 60
+        /// 状态页请求超时（秒）
+        static let requestTimeout: TimeInterval = 15
+    }
 }
