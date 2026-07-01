@@ -40,6 +40,13 @@ final class EmotionAnalyzer {
         Reply with ONLY valid JSON: {"emotion": "...", "intensity": ...}
         """
 
+    // MARK: - Response Cache (v2.1: 避免对相似 prompt 重复调 API)
+
+    /// LRU 缓存 — key 为 prompt 前 200 字符的归一化形式，避免 API 重复调用
+    private var responseCache: [(key: String, result: (ClawEmotion, Double), time: Date)] = []
+    private static let maxCacheSize = 20
+    private static let cacheTTL: TimeInterval = 300  // 5 分钟过期
+
     private init() {}
 
     // MARK: - Public
@@ -53,6 +60,13 @@ final class EmotionAnalyzer {
         guard let apiKey = AppSettings.anthropicApiKey, !apiKey.isEmpty else {
             logger.info("No Anthropic API key configured, skipping emotion analysis")
             return (.neutral, 0.0)
+        }
+
+        // v2.1: 检查缓存 — 相同/相似 prompt 直接返回
+        let cacheKey = Self.normalizeCacheKey(prompt)
+        if let cached = lookupCache(key: cacheKey) {
+            logger.info("Emotion cache hit: \(cached.0.rawValue, privacy: .public) @ \(cached.1)")
+            return cached
         }
 
         do {
@@ -72,11 +86,44 @@ final class EmotionAnalyzer {
             }
             let elapsed = ContinuousClock.now - start
             logger.info("Emotion analysis took \(elapsed, privacy: .public): \(result.emotion.rawValue) @ \(result.intensity)")
+
+            // 缓存结果
+            insertCache(key: cacheKey, result: result)
+
             return result
         } catch {
             let elapsed = ContinuousClock.now - start
             logger.error("Haiku API failed (\(elapsed, privacy: .public)): \(error.localizedDescription)")
             return (.neutral, 0.0)
+        }
+    }
+
+    // MARK: - Cache Helpers
+
+    private static func normalizeCacheKey(_ prompt: String) -> String {
+        // 取前 200 字符，统一小写，去除多余空白
+        let trimmed = String(prompt.prefix(200))
+            .lowercased()
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        return trimmed
+    }
+
+    private func lookupCache(key: String) -> (ClawEmotion, Double)? {
+        let now = Date()
+        // 清除过期条目
+        responseCache.removeAll { now.timeIntervalSince($0.time) > Self.cacheTTL }
+        return responseCache.first { $0.key == key }?.result
+    }
+
+    private func insertCache(key: String, result: (ClawEmotion, Double)) {
+        // 移除重复 key
+        responseCache.removeAll { $0.key == key }
+        responseCache.append((key: key, result: result, time: Date()))
+        // LRU 淘汰
+        if responseCache.count > Self.maxCacheSize {
+            responseCache.removeFirst()
         }
     }
 

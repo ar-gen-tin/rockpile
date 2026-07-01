@@ -332,6 +332,9 @@ enum L10n {
         "provider.connections": "连接",
         "provider.allConnected": "全部已连接",
         "provider.someDisconnected": "部分断开",
+        "provider.disconnected": "未连接",
+        "provider.connecting": "连接中…",
+        "provider.connected": "已连接",
     ]
 
     private static let zhArrays: [String: [String]] = [
@@ -670,6 +673,9 @@ enum L10n {
         "provider.connections": "Connections",
         "provider.allConnected": "All connected",
         "provider.someDisconnected": "Some disconnected",
+        "provider.disconnected": "Disconnected",
+        "provider.connecting": "Connecting…",
+        "provider.connected": "Connected",
     ]
 
     private static let enArrays: [String: [String]] = [
@@ -1008,6 +1014,9 @@ enum L10n {
         "provider.connections": "接続",
         "provider.allConnected": "全接続済み",
         "provider.someDisconnected": "一部切断",
+        "provider.disconnected": "未接続",
+        "provider.connecting": "接続中…",
+        "provider.connected": "接続済み",
     ]
 
     private static let jaArrays: [String: [String]] = [

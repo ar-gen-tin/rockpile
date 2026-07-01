@@ -3,6 +3,8 @@ import Observation
 
 /// Token 用量追踪器 — 驱动 O₂ 氧气条显示
 ///
+/// v2.1: 性能优化 — 缓存 burnRate/velocity 计算结果，仅在快照更新时重算
+///
 /// v2.0: 每个 tracker 绑定 `creatureType`，自动读取对应的 per-creature 设置：
 /// - hermitCrab → `localOxygenMode` / `localOxygenTankCapacity`
 /// - crawfish → `remoteOxygenMode` / `remoteOxygenTankCapacity`
@@ -48,6 +50,12 @@ final class TokenTracker {
 
     /// 会话开始时间（首次 recordUsage 时设置）
     private var sessionStartTime: Date?
+
+    // MARK: - Cached Burn Rate (v2.1 性能优化: 缓存计算结果)
+
+    /// 缓存的 burn rate — 仅在 recordSnapshot() 时重算，避免每次 UI 读取都遍历快照
+    private var _cachedBurnRate: Double = 0
+    private var _cachedVelocityTrend: VelocityTrend = .unknown
 
     // MARK: - Feeding System
 
@@ -99,11 +107,8 @@ final class TokenTracker {
     /// - Paid mode: uses accumulated per-request tokens (session-based tracking for xAI/Google etc.)
     var effectiveDailyUsed: Int {
         if isClaudeQuotaMode {
-            // stats-cache 可能只有昨日数据，session 只有当前会话
-            // 取较大值确保 O₂ 条始终反映最新可用数据
             return max(dailyTokensUsed, sessionTotalTokens)
         }
-        // Paid mode: accumulate from per-request data
         return sessionTotalTokens > 0 ? sessionTotalTokens : dailyTokensUsed
     }
 
@@ -147,7 +152,7 @@ final class TokenTracker {
         isPaidMode || hasUsageData
     }
 
-    // MARK: - Burn Rate & Predictions (Deep Module 公开面)
+    // MARK: - Burn Rate & Predictions (v2.1: 读缓存，写时更新)
 
     /// Tank capacity exposed for UI display (日进度计算)
     var tankCapacityForDisplay: Int { tankCapacity }
@@ -170,19 +175,8 @@ final class TokenTracker {
     }
 
     /// 近 2 分钟 tokens/分钟（平滑值）。无数据时返回 0 — Define Errors Out。
-    var burnRate: Double {
-        let windowSize = RC.BurnRate.windowSize
-        let now = Date()
-        let cutoff = now.addingTimeInterval(-windowSize)
-        let recent = tokenSnapshots.filter { $0.timestamp >= cutoff }
-        guard recent.count >= RC.BurnRate.minDataPoints,
-              let first = recent.first, let last = recent.last else { return 0 }
-        let elapsed = last.timestamp.timeIntervalSince(first.timestamp)
-        guard elapsed >= 10 else { return 0 }  // 至少 10 秒跨度
-        let tokenDelta = Double(last.total - first.total)
-        guard tokenDelta > 0 else { return 0 }
-        return tokenDelta / (elapsed / 60.0)  // tokens per minute
-    }
+    /// v2.1: 读取缓存值，不再每次遍历快照。
+    var burnRate: Double { _cachedBurnRate }
 
     /// 格式化消耗率: "2.1K/m", "0/m"
     var burnRateText: String {
@@ -228,6 +222,7 @@ final class TokenTracker {
     }
 
     /// 速度趋势 — 近 1 分钟 vs 前 1 分钟
+    /// v2.1: 读取缓存值
     enum VelocityTrend: String {
         case increasing  // >15% 加速
         case stable      // ±15% 内
@@ -235,8 +230,72 @@ final class TokenTracker {
         case unknown     // 数据不足
     }
 
-    var velocityTrend: VelocityTrend {
+    var velocityTrend: VelocityTrend { _cachedVelocityTrend }
+
+    /// 趋势箭头 UI
+    var velocityArrow: String {
+        switch velocityTrend {
+        case .increasing: return "↑"
+        case .stable:     return "→"
+        case .decreasing: return "↓"
+        case .unknown:    return ""
+        }
+    }
+
+    /// O₂ 压力综合值 (0.0=平静, 1.0=极度紧张)
+    /// 综合 oxygenLevel + burnRate pace + velocityTrend + ETA
+    var oxygenStress: Double {
+        if isDead { return 1.0 }
+        if !hasUsageData { return 0.0 }
+
+        var stress = 1.0 - oxygenLevel
+
+        if paceStatus == .ahead {
+            stress = min(1.0, stress + 0.15)
+        }
+        if velocityTrend == .increasing {
+            stress = min(1.0, stress + 0.1)
+        }
+        if let eta = etaMinutes, eta < 30 {
+            stress = min(1.0, stress + 0.2)
+        }
+
+        return stress
+    }
+
+    // MARK: - Temporal Snapshot Recording & Cache Refresh
+
+    /// 记录时间快照并刷新缓存的 burnRate/velocity
+    private func recordSnapshot() {
+        if sessionStartTime == nil {
+            sessionStartTime = Date()
+        }
         let now = Date()
+        tokenSnapshots.append((timestamp: now, total: sessionTotalTokens))
+        // 裁剪 5 分钟外的旧快照
+        let cutoff = now.addingTimeInterval(-300)
+        tokenSnapshots.removeAll { $0.timestamp < cutoff }
+
+        // v2.1: 刷新缓存（lil-agents 风格: write-time computation）
+        _cachedBurnRate = computeBurnRate(now: now)
+        _cachedVelocityTrend = computeVelocityTrend(now: now)
+    }
+
+    /// 计算 burn rate — 仅在 recordSnapshot 内调用
+    private func computeBurnRate(now: Date) -> Double {
+        let cutoff = now.addingTimeInterval(-RC.BurnRate.windowSize)
+        let recent = tokenSnapshots.filter { $0.timestamp >= cutoff }
+        guard recent.count >= RC.BurnRate.minDataPoints,
+              let first = recent.first, let last = recent.last else { return 0 }
+        let elapsed = last.timestamp.timeIntervalSince(first.timestamp)
+        guard elapsed >= 10 else { return 0 }
+        let tokenDelta = Double(last.total - first.total)
+        guard tokenDelta > 0 else { return 0 }
+        return tokenDelta / (elapsed / 60.0)
+    }
+
+    /// 计算速度趋势 — 仅在 recordSnapshot 内调用
+    private func computeVelocityTrend(now: Date) -> VelocityTrend {
         let mid = now.addingTimeInterval(-60)
         let start = now.addingTimeInterval(-120)
         let recentHalf = tokenSnapshots.filter { $0.timestamp >= mid }
@@ -259,57 +318,6 @@ final class TokenTracker {
         if change > RC.BurnRate.velocityThreshold { return .increasing }
         if change < -RC.BurnRate.velocityThreshold { return .decreasing }
         return .stable
-    }
-
-    /// 趋势箭头 UI
-    var velocityArrow: String {
-        switch velocityTrend {
-        case .increasing: return "↑"
-        case .stable:     return "→"
-        case .decreasing: return "↓"
-        case .unknown:    return ""
-        }
-    }
-
-    /// O₂ 压力综合值 (0.0=平静, 1.0=极度紧张)
-    /// 综合 oxygenLevel + burnRate pace + velocityTrend + ETA
-    var oxygenStress: Double {
-        if isDead { return 1.0 }
-        if !hasUsageData { return 0.0 }
-
-        // 基础压力: O₂ 越低压力越高
-        var stress = 1.0 - oxygenLevel
-
-        // 配速过快时增加压力
-        if paceStatus == .ahead {
-            stress = min(1.0, stress + 0.15)
-        }
-
-        // 加速中增加压力
-        if velocityTrend == .increasing {
-            stress = min(1.0, stress + 0.1)
-        }
-
-        // ETA 很短时额外增加压力
-        if let eta = etaMinutes, eta < 30 {
-            stress = min(1.0, stress + 0.2)
-        }
-
-        return stress
-    }
-
-    // MARK: - Temporal Snapshot Recording
-
-    /// 记录时间快照（在各 record 方法中调用）
-    private func recordSnapshot() {
-        if sessionStartTime == nil {
-            sessionStartTime = Date()
-        }
-        let now = Date()
-        tokenSnapshots.append((timestamp: now, total: sessionTotalTokens))
-        // 裁剪 5 分钟外的旧快照
-        let cutoff = now.addingTimeInterval(-300)
-        tokenSnapshots.removeAll { $0.timestamp < cutoff }
     }
 
     /// O₂ zone name for logging

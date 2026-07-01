@@ -29,6 +29,7 @@ enum HookInstaller {
     // MARK: - Public API
 
     /// Install hook if ~/.claude/ exists and hook isn't already installed.
+    /// v2.1: 使用 ShellEnvironment 确保 python3 路径可靠
     static func installIfNeeded() {
         let claudeDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude")
@@ -43,6 +44,11 @@ enum HookInstaller {
             logger.info("Hook already installed and up-to-date")
             registerInSettings()
             return
+        }
+
+        // Pre-resolve shell environment for python3 discovery
+        Task { @MainActor in
+            await ShellEnvironment.shared.resolveIfNeeded()
         }
 
         install()

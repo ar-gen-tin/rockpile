@@ -6,6 +6,8 @@ private let logger = Logger(subsystem: "com.rockpile.app", category: "GatewayCli
 
 /// Rockpile Gateway WebSocket 客户端 — 双向通信核心
 ///
+/// v2.1: 增加连接诊断、自动启动连接、graceful degradation
+///
 /// 连接流程：
 ///   1. WebSocket 连接 `ws://<host>:<port>`
 ///   2. 收到 `connect.challenge` (含 nonce)
@@ -25,11 +27,25 @@ final class GatewayClient {
         case connected
     }
 
-    private(set) var state: ConnectionState = .disconnected
+    private(set) var state: ConnectionState = .disconnected {
+        didSet {
+            guard state != oldValue else { return }
+            // v2.1: 连接诊断计数 (lil-agents 风格: 追踪连接健康)
+            if state == .connected {
+                consecutiveFailures = 0
+                lastConnectedTime = Date()
+            }
+        }
+    }
     private(set) var connectionId: String?
 
     /// Available session keys from gateway snapshot
     private(set) var sessionKeys: [String] = []
+
+    /// v2.1: 连接健康诊断
+    private(set) var consecutiveFailures: Int = 0
+    private(set) var lastConnectedTime: Date?
+    private(set) var totalReconnects: Int = 0
 
     private var wsTask: URLSessionWebSocketTask?
     private var wsSession: URLSession?
@@ -464,10 +480,16 @@ final class GatewayClient {
     // MARK: - Reconnect
 
     private func handleDisconnect() {
+        consecutiveFailures += 1
         teardown()
         NotificationManager.shared.notifyConnectionChange(type: "Gateway", connected: false)
         if !intentionalDisconnect {
-            StateMachine.shared.reportError("Gateway 连接断开，正在重连…")
+            // v2.1: 连续失败时降级提示 (lil-agents graceful degradation 模式)
+            if consecutiveFailures >= 5 {
+                StateMachine.shared.reportError("Gateway 重连多次失败，请检查配置")
+            } else {
+                StateMachine.shared.reportError("Gateway 连接断开，正在重连…")
+            }
             scheduleReconnect()
         }
     }
@@ -475,13 +497,14 @@ final class GatewayClient {
     private func scheduleReconnect() {
         guard !intentionalDisconnect else { return }
 
+        totalReconnects += 1
         let baseDelay = reconnectDelay
         // ±25% jitter 防雷群效应 (CodexBar pattern)
         let jitter = baseDelay * Double.random(in: -0.25...0.25)
         let delay = max(1.0, baseDelay + jitter)
         reconnectDelay = min(reconnectDelay * 2, maxReconnectDelay)
 
-        logger.info("Reconnecting in \(String(format: "%.1f", delay), privacy: .public)s...")
+        logger.info("Reconnecting in \(String(format: "%.1f", delay), privacy: .public)s (attempt #\(self.totalReconnects))...")
         reconnectTimer?.invalidate()
         reconnectTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
             Task { @MainActor in

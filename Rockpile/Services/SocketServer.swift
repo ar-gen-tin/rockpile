@@ -360,8 +360,11 @@ final class SocketServer: @unchecked Sendable {
     }
 
     /// Handle POST /register: 控制端注册自己的 IP，服务端生成 Rockpile 插件
+    ///
+    /// v2.1: 消除 DispatchSemaphore 阻塞（lil-agents 风格: 异步处理 + 立即应答）
+    /// 原实现用信号量阻塞 socket queue 等待 MainActor，可能导致死锁或延迟。
+    /// 新实现: 先发 200 应答释放连接，再异步执行 MainActor 操作。
     private func handleRegisterRequest(body: String, clientSocket: Int32) {
-        // Parse {"monitorIP": "x.x.x.x"}
         guard let data = body.data(using: .utf8),
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let monitorIP = json["monitorIP"] as? String, !monitorIP.isEmpty else {
@@ -377,29 +380,11 @@ final class SocketServer: @unchecked Sendable {
         }
 
         let port = (json["monitorPort"] as? NSNumber).flatMap { UInt16(exactly: $0) } ?? 18790
+        let remoteCommandPort = (json["commandPort"] as? NSNumber).flatMap { UInt16(exactly: $0) }
 
         logger.info("Register request: monitorIP=\(monitorIP, privacy: .public) port=\(port)")
 
-        // Parse optional commandPort from registering client
-        let remoteCommandPort = (json["commandPort"] as? NSNumber).flatMap { UInt16(exactly: $0) }
-
-        // Save and install plugin on main thread, wait for completion before responding
-        let semaphore = DispatchSemaphore(value: 0)
-
-        Task { @MainActor in
-            AppSettings.monitorHost = monitorIP
-            if let rcp = remoteCommandPort {
-                AppSettings.commandPort = rcp
-            }
-            PluginInstaller.installTCPPlugin(targetHost: monitorIP, targetPort: port)
-            logger.info("Plugin installed for monitor \(monitorIP, privacy: .public):\(port)")
-            semaphore.signal()
-        }
-
-        // Wait up to 5s for main thread to finish
-        _ = semaphore.wait(timeout: .now() + 5)
-
-        // Read values directly from UserDefaults (thread-safe) after main thread completes
+        // Read current values from UserDefaults (thread-safe) for immediate response
         let defaults = UserDefaults.standard
         let cmdPort = defaults.integer(forKey: "commandPort")
         let cmdPortVal = cmdPort > 0 ? cmdPort : 18793
@@ -410,14 +395,24 @@ final class SocketServer: @unchecked Sendable {
             "commandPort": cmdPortVal,
             "commandToken": cmdToken,
         ]
-        let body: String
+        let responseBody: String
         if let jsonData = try? JSONSerialization.data(withJSONObject: responseDict),
            let jsonStr = String(data: jsonData, encoding: .utf8) {
-            body = jsonStr
+            responseBody = jsonStr
         } else {
-            body = "{\"ok\":true}"
+            responseBody = "{\"ok\":true}"
         }
-        sendHTTPResponse(clientSocket, status: 200, body: body)
+        sendHTTPResponse(clientSocket, status: 200, body: responseBody)
+
+        // Perform MainActor work asynchronously — no blocking, no semaphore
+        Task { @MainActor in
+            AppSettings.monitorHost = monitorIP
+            if let rcp = remoteCommandPort {
+                AppSettings.commandPort = rcp
+            }
+            PluginInstaller.installTCPPlugin(targetHost: monitorIP, targetPort: port)
+            logger.info("Plugin installed for monitor \(monitorIP, privacy: .public):\(port)")
+        }
     }
 
     /// Extract Content-Length value from HTTP headers string

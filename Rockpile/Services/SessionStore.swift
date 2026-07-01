@@ -3,6 +3,8 @@ import Observation
 
 /// 会话存储 — 管理所有活跃的 Rockpile Agent 会话
 ///
+/// v2.1: 性能优化 — 缓存排序结果，写时刷新（lil-agents 模式）
+///
 /// 职责：
 /// - 维护 `sessions` 字典（session_id → SessionData）
 /// - 为每个会话分配递增编号和随机 X 位置（避免小龙虾重叠）
@@ -19,21 +21,28 @@ final class SessionStore {
     /// 全局 TokenTracker — 即使无活跃会话也保留最新 token 数据，驱动常驻 O₂ 条
     let globalTokenTracker = TokenTracker()
 
+    /// Dedicated token tracker for local sessions
+    let localTokenTracker = TokenTracker()
+
+    /// Dedicated token tracker for remote sessions
+    let remoteTokenTracker = TokenTracker()
+
     /// Sessions idle/sleeping longer than this are automatically removed
-    private static let sessionTimeout: TimeInterval = 300 // 5 分钟（进入休眠即超时）
+    private static let sessionTimeout: TimeInterval = 300
+
+    // MARK: - Cached Sorted Arrays (v2.1: 写时刷新，读时 O(1))
+
+    /// 缓存的排序会话列表 — 仅在 sessions 变更时重建
+    private(set) var sortedSessions: [SessionData] = []
+
+    /// 缓存的 local/remote 过滤列表
+    private(set) var localSessions: [SessionData] = []
+    private(set) var remoteSessions: [SessionData] = []
 
     init() {
         localTokenTracker.creatureType = .hermitCrab
         remoteTokenTracker.creatureType = .crawfish
         startCleanupTimer()
-    }
-
-    // Note: No deinit needed — singleton (`shared`) is never deallocated.
-    // Adding deinit would require `nonisolated(unsafe)` on cleanupTimer
-    // due to Swift 6 MainActor isolation rules.
-
-    var sortedSessions: [SessionData] {
-        sessions.values.sorted { $0.sessionNumber < $1.sessionNumber }
     }
 
     var activeSessionCount: Int {
@@ -47,20 +56,6 @@ final class SessionStore {
         return sortedSessions.first
     }
 
-    // MARK: - Per-Creature Queries
-
-    /// All local sessions (hermit crab / Claude Code)
-    var localSessions: [SessionData] {
-        sessions.values.filter { $0.creatureType == .hermitCrab }
-            .sorted { $0.sessionNumber < $1.sessionNumber }
-    }
-
-    /// All remote sessions (crawfish / Openclaw)
-    var remoteSessions: [SessionData] {
-        sessions.values.filter { $0.creatureType == .crawfish }
-            .sorted { $0.sessionNumber < $1.sessionNumber }
-    }
-
     /// Effective local session (first active hermit crab)
     var effectiveLocalSession: SessionData? {
         localSessions.first
@@ -71,11 +66,7 @@ final class SessionStore {
         remoteSessions.first
     }
 
-    /// Dedicated token tracker for local sessions
-    let localTokenTracker = TokenTracker()
-
-    /// Dedicated token tracker for remote sessions
-    let remoteTokenTracker = TokenTracker()
+    // MARK: - Session Mutations (统一入口，自动刷新缓存)
 
     @discardableResult
     func getOrCreateSession(id: String, cwd: String, creatureType: CreatureType = .crawfish) -> SessionData {
@@ -92,8 +83,8 @@ final class SessionStore {
             existingXPositions: existingPositions
         )
         sessions[id] = session
+        rebuildSortedCaches()
         EventLogger.shared.logSessionCreated(id: id, total: sessions.count)
-        // Flush any queued commands now that a session is available
         CommandSender.shared.flushQueueIfNeeded()
         return session
     }
@@ -119,6 +110,7 @@ final class SessionStore {
         }
         sessions[id]?.cleanup()
         sessions.removeValue(forKey: id)
+        rebuildSortedCaches()
         if selectedSessionId == id {
             selectedSessionId = nil
         }
@@ -136,10 +128,19 @@ final class SessionStore {
         }
     }
 
+    // MARK: - Cache Rebuild
+
+    /// 重建排序缓存 — O(n log n)，仅在 session 增删时调用
+    private func rebuildSortedCaches() {
+        let sorted = sessions.values.sorted { $0.sessionNumber < $1.sessionNumber }
+        sortedSessions = sorted
+        localSessions = sorted.filter { $0.creatureType == .hermitCrab }
+        remoteSessions = sorted.filter { $0.creatureType == .crawfish }
+    }
+
     // MARK: - Stale Session Cleanup
 
     private func startCleanupTimer() {
-        // Check every 15 seconds for faster cleanup
         cleanupTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.cleanupStaleSessions()
@@ -151,7 +152,6 @@ final class SessionStore {
         let now = Date()
         let staleIds = sessions.filter { (_, session) in
             let age = now.timeIntervalSince(session.lastEventTime)
-            // Remove if: sleeping (already timed out) OR idle for > 5 min
             return session.state.task == .sleeping ||
                    (age > Self.sessionTimeout && session.state.task == .idle)
         }.map(\.key)
